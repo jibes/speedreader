@@ -1,4 +1,5 @@
 /** Turn any text-bearing file into plain text. Heavy parsers are lazy-loaded. */
+import { OCR_LANGS, ocrBase } from './ocrPrefetch';
 
 export type Progress = (msg: string) => void;
 
@@ -159,8 +160,8 @@ async function epub(file: File, onProgress: Progress): Promise<string> {
 async function ocr(file: File, onProgress: Progress): Promise<string> {
   const { createWorker } = await import('tesseract.js');
   onProgress('Loading text recognition…');
-  const base = new URL('ocr/', document.baseURI).href;
-  const worker = await createWorker(['eng', 'deu'], 1, {
+  const base = ocrBase();
+  const worker = await createWorker(OCR_LANGS, 1, {
     workerPath: base + 'worker.min.js',
     corePath: base,
     langPath: base + 'lang',
