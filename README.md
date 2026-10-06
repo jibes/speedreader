@@ -23,6 +23,10 @@ Lumen is a PWA: use *Install* in the header (Chrome/Edge/Android) or *Share → 
 - appears in the system share sheet — share text, or share a link and Lumen fetches the article (Android, desktop Chrome)
 - *Open with → Lumen* for PDF, EPUB, DOCX, ODT, RTF, TXT, MD, HTML (desktop Chromium)
 
+## Backup
+
+*Progress → Backup*: **Export** saves texts, reading positions, sessions and settings as `lumen-backup-YYYY-MM-DD.json`; **Restore** (or dropping the file on the Read page) merges it back — nothing is deleted, duplicates are skipped, the further reading position wins.
+
 ## Keys
 
 `Space` play/pause · `←/→` sentence · `↑/↓` ±10 wpm (`Shift` ±50) · `M` mode · `Esc` library · `1–4` answer

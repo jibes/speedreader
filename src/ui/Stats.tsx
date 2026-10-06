@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { store, type Session } from '../core/store';
+import { BackupPanel } from './Backup';
 
 const fmtDate = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
@@ -9,7 +10,9 @@ function minutes(ms: number) {
 }
 
 export function Stats() {
-  const sessions = useMemo(() => store.sessions(), []);
+  const [version, setVersion] = useState(0);
+  const sessions = useMemo(() => store.sessions(), [version]);
+  const backup = <BackupPanel onRestored={() => setVersion((v) => v + 1)} />;
   const tested = sessions.filter((s) => s.accuracy !== undefined);
   const words = sessions.reduce((a, s) => a + s.words, 0);
   const ms = sessions.reduce((a, s) => a + s.ms, 0);
@@ -25,6 +28,7 @@ export function Stats() {
       <div className="page">
         <h1>Progress</h1>
         <p className="lede">Nothing yet. Read with training on — your effective reading rate (speed × comprehension) will be tracked here.</p>
+        {backup}
       </div>
     );
   }
@@ -64,6 +68,7 @@ export function Stats() {
           ))}
         </tbody>
       </table>
+      {backup}
     </div>
   );
 }
