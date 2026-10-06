@@ -12,6 +12,15 @@ export const Back = () => (
 export const Close = () => (
   <svg viewBox="0 0 24 24" {...P}><path d="M18 6L6 18M6 6l12 12" /></svg>
 );
-export const Sliders = () => (
-  <svg viewBox="0 0 24 24" {...P}><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+export const TextSize = () => (
+  <svg viewBox="0 0 24 24" {...P}><path d="M3 18l5-12 5 12M4.7 14h6.6M14.5 18l3.5-8 3.5 8M15.6 15.5h4.8" /></svg>
+);
+export const Minus = () => (
+  <svg viewBox="0 0 24 24" {...P}><path d="M6 12h12" /></svg>
+);
+export const PlusI = () => (
+  <svg viewBox="0 0 24 24" {...P}><path d="M12 6v12M6 12h12" /></svg>
+);
+export const Clip = () => (
+  <svg viewBox="0 0 24 24" {...P}><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" /></svg>
 );

@@ -4,9 +4,9 @@ import { gistQuiz, planSkim, SKIM_PACE } from '../core/skim';
 import { SECTION_WORDS, SKIM_SECTION_WORDS, store, type DocMeta, type Settings } from '../core/store';
 import { buildDoc, type Doc } from '../core/text';
 import { clampWpm, nextWpm, startFromBaseline } from '../core/trainer';
-import { Back, Close, Pause, Play, Sliders } from './icons';
+import { Back, Close, Minus, Pause, Play, PlusI, TextSize } from './icons';
 import { Quiz, Result, type ResultInfo } from './Quiz';
-import { SettingsSheet } from './Settings';
+import { GOAL_INFO, Seg, SettingsSheet } from './Settings';
 import { useWakeLock } from './useWakeLock';
 
 type QuizSheet = { kind: 'quiz'; questions: Question[]; from: number; to: number; ms: number; baseline?: boolean; skim?: boolean };
@@ -331,9 +331,11 @@ export function Reader({
   return (
     <div className="reader">
       <div className="r-top">
-        <button className="icon" aria-label="Back to library" onClick={onExit}><Close /></button>
-        <div className="r-title">{meta.title}</div>
-        <button className="icon" aria-label="Settings" onClick={() => { pause(); setSheet({ kind: 'settings' }); }}><Sliders /></button>
+        <button className="icon" aria-label="Back to library" title={meta.title} onClick={onExit}><Close /></button>
+        <div className="r-goal" title={GOAL_INFO[goal]}>
+          <Seg value={goal} options={[['read', 'Read'], ['train', 'Train'], ['skim', 'Skim']]} onChange={(g) => setSettings({ goal: g })} />
+        </div>
+        <button className="icon" aria-label="Text settings" onClick={() => { pause(); setSheet({ kind: 'settings' }); }}><TextSize /></button>
       </div>
       <div className="r-progress"><span style={{ width: `${progress * 100}%` }} /></div>
 
@@ -357,11 +359,17 @@ export function Reader({
           <button className="icon play" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle}>{playing ? <Pause /> : <Play />}</button>
           <div className="speed">
             {goal === 'train' ? (
-              <span className="auto-speed" title="Training adjusts the speed from your answers">Adaptive</span>
+              <div className="speed-auto" title="Training sets the speed from your answers">
+                <output>{settings.wpm} <small>wpm</small></output>
+                <small>adaptive</small>
+              </div>
             ) : (
-              <input type="range" min={100} max={1200} step={10} value={settings.wpm} aria-label="Words per minute" onChange={(e) => setSettings({ wpm: +e.target.value })} />
+              <>
+                <button className="icon" aria-label="Slower" onClick={() => setSettings({ wpm: clampWpm(settings.wpm - 20) })}><Minus /></button>
+                <output aria-live="polite">{settings.wpm} <small>wpm</small></output>
+                <button className="icon" aria-label="Faster" onClick={() => setSettings({ wpm: clampWpm(settings.wpm + 20) })}><PlusI /></button>
+              </>
             )}
-            <output>{settings.wpm} <small>wpm</small></output>
           </div>
         </div>
       )}
@@ -372,6 +380,7 @@ export function Reader({
         <Result
           r={sheet.info}
           onClose={() => setSheet(null)}
+          onRetry={startBaseline}
           onContinue={() => {
             setSheet(null);
             if (pos < total - 1) play();

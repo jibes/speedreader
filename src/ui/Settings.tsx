@@ -6,7 +6,7 @@ type Props = {
   onClose: () => void;
 };
 
-function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+export function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
     <div className="seg">
       {options.map(([v, label]) => (
@@ -17,25 +17,19 @@ function Seg<T extends string | number>({ value, options, onChange }: { value: T
 }
 
 export const GOAL_INFO: Record<Goal, string> = {
-  read: 'Steady pacer at the speed you set. No checks.',
-  train: 'Quick questions after each section; speed adapts to keep comprehension around 75 %.',
-  skim: 'Key sentences and terms at your pace, the rest swept past. Checks ask which topics came up.',
+  read: 'Steady pacer at your speed',
+  train: 'Speed adapts to your answers',
+  skim: 'Key sentences only, topic checks',
 };
 
 export function SettingsSheet({ s, set, onClose }: Props) {
   return (
     <div className="scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sheet" role="dialog" aria-label="Settings">
-        <h3>Goal</h3>
-        <div className="row goal-row">
-          <Seg value={s.goal} options={[['read', 'Read'], ['train', 'Train'], ['skim', 'Skim']]} onChange={(goal) => set({ goal })} />
-          <small>{GOAL_INFO[s.goal]}</small>
-        </div>
-
-        <h3 className="sheet-h">Appearance</h3>
+      <div className="sheet" role="dialog" aria-label="Text settings">
+        <h3>Text</h3>
         <div className="row">
-          <label>Text size</label>
-          <input type="range" min={16} max={34} value={s.fontSize} style={{ maxWidth: 160 }} aria-label="Text size" onChange={(e) => set({ fontSize: +e.target.value })} />
+          <label>Size</label>
+          <input type="range" min={16} max={34} value={s.fontSize} style={{ maxWidth: 180 }} aria-label="Text size" onChange={(e) => set({ fontSize: +e.target.value })} />
         </div>
         <div className="row">
           <label>Typeface</label>
