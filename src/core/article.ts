@@ -4,6 +4,7 @@
  * 2. Fallback: r.jina.ai reader service, which fetches server-side and returns
  *    clean Markdown. Only the URL is sent; nothing else leaves the device.
  */
+import { t } from '../i18n';
 import { extractText, htmlToText, markdown, type Progress } from './extract';
 
 export const READER_SERVICE = 'https://r.jina.ai/';
@@ -85,25 +86,25 @@ async function direct(url: string): Promise<{ title: string; text: string } | nu
 
 async function viaReader(url: string): Promise<{ title: string; text: string }> {
   const res = await timed(READER_SERVICE + url, { headers: { Accept: 'application/json' } }, 30000);
-  if (!res.ok) throw new FetchError(`Couldn't fetch this page (${res.status}).`);
+  if (!res.ok) throw new FetchError(t('err.fetchStatus', { status: String(res.status) }));
   const json = (await res.json()) as { data?: { title?: string; content?: string } };
   const content = json.data?.content?.trim();
-  if (!content) throw new FetchError('No readable text found on this page.');
+  if (!content) throw new FetchError(t('err.noText'));
   return { title: json.data?.title ?? '', text: markdown(content) };
 }
 
 export async function fetchArticle(raw: string, onProgress: Progress = () => {}): Promise<Article> {
   const u = safeUrl(raw.trim());
-  if (!u) throw new Error('Not a valid web address.');
+  if (!u) throw new Error(t('err.badUrl'));
   const url = u.href;
-  onProgress(`Fetching ${u.hostname}…`);
+  onProgress(t('prog.fetch', { host: u.hostname }));
   let got = await direct(url).catch(() => null);
   if (!got || got.text.trim().split(/\s+/).length < 50) {
-    onProgress(`Fetching ${u.hostname} via reader service…`);
+    onProgress(t('prog.fetchReader', { host: u.hostname }));
     try {
       got = await viaReader(url);
     } catch (e) {
-      if (!got) throw e instanceof FetchError ? e : new Error("Couldn't reach this page — try pasting its text instead.");
+      if (!got) throw e instanceof FetchError ? e : new Error(t('err.unreachable'));
     }
   }
   return { url, title: got.title.trim() || u.hostname, text: got.text };

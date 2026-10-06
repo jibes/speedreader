@@ -6,7 +6,8 @@ import { buildDoc, type Doc } from '../core/text';
 import { clampWpm, nextWpm, startFromBaseline } from '../core/trainer';
 import { Back, Close, Minus, Pause, Play, PlusI, TextSize } from './icons';
 import { Quiz, Result, type ResultInfo } from './Quiz';
-import { GOAL_INFO, Seg, SettingsSheet } from './Settings';
+import { t } from '../i18n';
+import { Seg, SettingsSheet } from './Settings';
 import { useWakeLock } from './useWakeLock';
 
 type QuizSheet = { kind: 'quiz'; questions: Question[]; from: number; to: number; ms: number; baseline?: boolean; skim?: boolean };
@@ -246,7 +247,7 @@ export function Reader({
     let to = Math.min(d.tokens.length, from + 280);
     while (to < d.tokens.length && d.tokens[to - 1].end !== 'sentence' && d.tokens[to - 1].end !== 'paragraph') to++;
     if (to - from < 80) {
-      alert('This text is too short for a speed test — try at least 150 words.');
+      alert(t('reader.tooShortTest'));
       return;
     }
     setSheet(null);
@@ -331,11 +332,11 @@ export function Reader({
   return (
     <div className="reader">
       <div className="r-top">
-        <button className="icon" aria-label="Back to library" title={meta.title} onClick={onExit}><Close /></button>
-        <div className="r-goal" title={GOAL_INFO[goal]}>
-          <Seg value={goal} options={[['read', 'Read'], ['train', 'Train'], ['skim', 'Skim']]} onChange={(g) => setSettings({ goal: g })} />
+        <button className="icon" aria-label={t('reader.back')} title={meta.title} onClick={onExit}><Close /></button>
+        <div className="r-goal" title={t(`goal.${goal}.info`)}>
+          <Seg value={goal} options={[['read', t('goal.read')], ['train', t('goal.train')], ['skim', t('goal.skim')]]} onChange={(g) => setSettings({ goal: g })} />
         </div>
-        <button className="icon" aria-label="Text settings" onClick={() => { pause(); setSheet({ kind: 'settings' }); }}><TextSize /></button>
+        <button className="icon" aria-label={t('reader.textSettings')} onClick={() => { pause(); setSheet({ kind: 'settings' }); }}><TextSize /></button>
       </div>
       <div className="r-progress"><span style={{ width: `${progress * 100}%` }} /></div>
 
@@ -347,27 +348,27 @@ export function Reader({
         )}
         {!playing && !baseline && !sheet && pos === meta.pos && (
           <div className="hint-play">
-            <kbd>Space</kbd> play · <kbd>←</kbd> back{goal !== 'train' && <> · <kbd>↑</kbd><kbd>↓</kbd> speed</>}
+            <kbd>Space</kbd> {t('reader.hintPlay')} · <kbd>←</kbd> {t('reader.hintBack')}{goal !== 'train' && <> · <kbd>↑</kbd><kbd>↓</kbd> {t('reader.hintSpeed')}</>}
           </div>
         )}
       </div>
 
       {!baseline && (
         <div className="dock">
-          <span className="meta">{Math.round(progress * 100)} % · {minsLeft} min left</span>
-          <button className="icon" aria-label="Back one sentence" onClick={() => sentenceJump(-1)}><Back /></button>
-          <button className="icon play" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle}>{playing ? <Pause /> : <Play />}</button>
+          <span className="meta">{t('reader.left', { p: Math.round(progress * 100), m: minsLeft })}</span>
+          <button className="icon" aria-label={t('reader.backSentence')} onClick={() => sentenceJump(-1)}><Back /></button>
+          <button className="icon play" aria-label={playing ? t('reader.pause') : t('reader.play')} onClick={toggle}>{playing ? <Pause /> : <Play />}</button>
           <div className="speed">
             {goal === 'train' ? (
-              <div className="speed-auto" title="Training sets the speed from your answers">
-                <output>{settings.wpm} <small>wpm</small></output>
-                <small>adaptive</small>
+              <div className="speed-auto" title={t('reader.adaptiveTip')}>
+                <output>{settings.wpm} <small>{t('wpm')}</small></output>
+                <small>{t('reader.adaptive')}</small>
               </div>
             ) : (
               <>
-                <button className="icon" aria-label="Slower" onClick={() => setSettings({ wpm: clampWpm(settings.wpm - 20) })}><Minus /></button>
-                <output aria-live="polite">{settings.wpm} <small>wpm</small></output>
-                <button className="icon" aria-label="Faster" onClick={() => setSettings({ wpm: clampWpm(settings.wpm + 20) })}><PlusI /></button>
+                <button className="icon" aria-label={t('reader.slower')} onClick={() => setSettings({ wpm: clampWpm(settings.wpm - 20) })}><Minus /></button>
+                <output aria-live="polite">{settings.wpm} <small>{t('wpm')}</small></output>
+                <button className="icon" aria-label={t('reader.faster')} onClick={() => setSettings({ wpm: clampWpm(settings.wpm + 20) })}><PlusI /></button>
               </>
             )}
           </div>
@@ -391,11 +392,11 @@ export function Reader({
       {sheet?.kind === 'end' && (
         <div className="scrim">
           <div className="sheet result">
-            <h3>Finished</h3>
-            <p className="sub">{total.toLocaleString()} words.</p>
+            <h3>{t('reader.finished')}</h3>
+            <p className="sub">{t('reader.finishedWords', { n: total })}</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-              <button className="btn secondary" onClick={() => { setSheet(null); seek(0); }}>Read again</button>
-              <button className="btn" autoFocus onClick={onExit}>Library</button>
+              <button className="btn secondary" onClick={() => { setSheet(null); seek(0); }}>{t('reader.again')}</button>
+              <button className="btn" autoFocus onClick={onExit}>{t('reader.library')}</button>
             </div>
           </div>
         </div>
@@ -422,7 +423,7 @@ function renderParas(doc: Doc, start: number, end: number, cls: (i: number) => s
     }
     words.push(
       <span key={i} data-i={i} className={cls(i)} onClick={onWord ? () => onWord(i) : undefined}>{t.text}</span>,
-      <span key={'s' + i}> </span>,
+      ...(t.gap ? [<span key={'s' + i}> </span>] : []),
     );
   }
   flush(end);
@@ -474,7 +475,8 @@ const Para = memo(function Para({
   for (let i = start; i < end; i++) {
     let cls = i < curStart ? 'w read' : i < curEnd ? 'w cur' : 'w';
     if (keyMask) cls += keyMask[i] ? ' key' : ' dim';
-    words.push(<span key={i} data-i={i} className={cls}>{doc.tokens[i].text}</span>, <span key={'s' + i}> </span>);
+    words.push(<span key={i} data-i={i} className={cls}>{doc.tokens[i].text}</span>);
+    if (doc.tokens[i].gap) words.push(<span key={'s' + i}> </span>);
   }
   return <p onClick={(e) => { const i = (e.target as HTMLElement).dataset.i; if (i) onWord(+i); }}>{words}</p>;
 });
@@ -605,21 +607,20 @@ function BaselineView({ doc, b, font, size, onStart, onDone, onCancel }: { doc: 
         {renderParas(doc, b.from, b.to, () => '')}
         {b.started && (
           <div style={{ textAlign: 'center', paddingTop: 16 }}>
-            <button className="btn accent" onClick={onDone}>I'm done · {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}</button>
+            <button className="btn accent" onClick={onDone}>{t('test.done', { time: `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` })}</button>
           </div>
         )}
       </div>
       {!b.started && (
         <div className="scrim">
           <div className="sheet">
-            <h3>Speed test</h3>
+            <h3>{t('test.title')}</h3>
             <p className="sub">
-              Read the next {(b.to - b.from).toLocaleString()} words at your normal pace — the way you'd read to really understand them.
-              Press <b>I'm done</b> at the end, then answer three quick questions. No pacer, no pressure.
+              {t('test.body', { n: b.to - b.from })}
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn secondary" onClick={onCancel}>Cancel</button>
-              <button className="btn" autoFocus onClick={onStart}>Start reading</button>
+              <button className="btn secondary" onClick={onCancel}>{t('test.cancel')}</button>
+              <button className="btn" autoFocus onClick={onStart}>{t('test.start')}</button>
             </div>
           </div>
         </div>

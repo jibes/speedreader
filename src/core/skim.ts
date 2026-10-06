@@ -3,9 +3,8 @@
  * information-dense parts — first sentence of each paragraph and its key
  * terms — and sweep past the rest. The check asks about topics, not words.
  */
-import type { Question } from './quiz';
+import { isContent, type Question } from './quiz';
 import type { Doc } from './text';
-import { isCommon } from './words';
 
 /** non-key words get this share of normal reading time */
 export const SKIM_PACE = 0.25;
@@ -26,7 +25,7 @@ export interface SkimPlan {
 }
 
 export const termOf = (w: string) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
-const isTerm = (t: string) => t.length >= 4 && !isCommon(t) && /\p{L}/u.test(t);
+const isTerm = isContent;
 
 function buildBlocks(doc: Doc): { start: number; end: number }[] {
   const out: { start: number; end: number }[] = [];
@@ -109,7 +108,7 @@ export function gistQuiz(doc: Doc, plan: SkimPlan, from: number, to: number, n =
     if (qs.length >= n || foreign.length < 3) break;
     const distractors = foreign.splice(0, 3);
     const options = shuffle([ans, ...distractors], rnd);
-    qs.push({ kind: 'gist', prompt: 'Which of these came up in what you just skimmed?', options, answer: options.indexOf(ans) });
+    qs.push({ kind: 'gist', prompt: '', options, answer: options.indexOf(ans) });
   }
   return qs;
 }

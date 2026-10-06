@@ -19,6 +19,8 @@ export interface Token {
   w: number;
   /** punctuation class at end of token */
   end: 'none' | 'clause' | 'sentence' | 'paragraph';
+  /** followed by a space when rendered (false inside CJK runs) */
+  gap: boolean;
 }
 
 export interface Doc {
@@ -29,8 +31,10 @@ export interface Doc {
   paragraphStarts: number[];
 }
 
-const SENTENCE_END = /[.!?…]["'”’»)\]]*$/;
-const CLAUSE_END = /[,;:—–\-]["'”’»)\]]*$/;
+const SENTENCE_END = /[.!?…。！？]["'”’»)\]」』）]*$/;
+const CLAUSE_END = /[,;:—–\-，、；：]["'”’»)\]」』）]*$/;
+/** scripts written without spaces between words */
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const ABBREV = new Set([
   'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'sr.', 'jr.', 'st.', 'vs.', 'etc.', 'e.g.', 'i.e.',
   'no.', 'fig.', 'al.', 'approx.', 'ca.', 'cf.', 'z.b.', 'bzw.', 'usw.', 'ggf.', 'vgl.', 'u.a.',
@@ -43,6 +47,8 @@ export function normaliseText(raw: string): string {
     .replace(/(\w)-\n(\w)/g, '$1$2') // de-hyphenate line breaks (PDF)
     .replace(/[ \t\f\v ]+/g, ' ')
     .replace(/ *\n */g, '\n')
+    // hard-wrapped CJK lines join without a space
+    .replace(/([\p{Script=Han}，。、；：！？])\n(?=[\p{Script=Han}])/gu, '$1')
     // single newlines inside paragraphs (hard-wrapped text) become spaces
     .replace(/([^\n])\n(?!\n)/g, '$1 ')
     .replace(/\n{3,}/g, '\n\n')
@@ -66,6 +72,36 @@ export function wordWeight(word: string): number {
 
 const END_WEIGHT = { none: 0, clause: 0.6, sentence: 1.3, paragraph: 2.0 } as const;
 
+interface Word {
+  text: string;
+  gap: boolean;
+}
+
+let segmenter: Intl.Segmenter | null | undefined;
+
+/** Split a paragraph into words: whitespace for most scripts, Intl.Segmenter for CJK. */
+export function splitWords(para: string): Word[] {
+  if (CJK.test(para)) {
+    segmenter ??= typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter('zh', { granularity: 'word' }) : null;
+    if (segmenter) {
+      const out: Word[] = [];
+      for (const seg of segmenter.segment(para)) {
+        if (/^\s+$/.test(seg.segment)) {
+          if (out.length) out[out.length - 1].gap = true;
+        } else if (seg.isWordLike || !out.length || out[out.length - 1].gap) {
+          // opening punctuation glues to the next word
+          if (out.length && !out[out.length - 1].gap && /^[“‘「『（(《]+$/.test(out[out.length - 1].text)) out[out.length - 1].text += seg.segment;
+          else out.push({ text: seg.segment, gap: false });
+        } else {
+          out[out.length - 1].text += seg.segment; // trailing punctuation sticks to its word
+        }
+      }
+      return out;
+    }
+  }
+  return para.split(/\s+/).filter(Boolean).map((text) => ({ text, gap: true }));
+}
+
 export function buildDoc(text: string): Doc {
   const tokens: Token[] = [];
   const sentenceStarts: number[] = [];
@@ -73,11 +109,11 @@ export function buildDoc(text: string): Doc {
   const paragraphs = normaliseText(text).split(/\n\n/).filter((p) => p.trim());
   let s = 0;
   paragraphs.forEach((para, p) => {
-    const words = para.split(/\s+/).filter(Boolean);
+    const words = splitWords(para);
     if (!words.length) return;
     paragraphStarts.push(tokens.length);
     let newSentence = true;
-    words.forEach((word, i) => {
+    words.forEach(({ text: word, gap }, i) => {
       if (newSentence) {
         sentenceStarts.push(tokens.length);
         newSentence = false;
@@ -87,7 +123,7 @@ export function buildDoc(text: string): Doc {
       if (i === words.length - 1) end = 'paragraph';
       else if (SENTENCE_END.test(word) && !ABBREV.has(lower) && !/^\p{Lu}\.$/u.test(word)) end = 'sentence';
       else if (CLAUSE_END.test(word)) end = 'clause';
-      tokens.push({ text: word, p, s, w: wordWeight(word) + END_WEIGHT[end], end });
+      tokens.push({ text: word, p, s, w: wordWeight(word) + END_WEIGHT[end], end, gap });
       if (end === 'sentence' || end === 'paragraph') {
         s++;
         newSentence = true;
@@ -101,5 +137,6 @@ export function buildDoc(text: string): Doc {
 }
 
 export function wordCount(text: string): number {
+  if (CJK.test(text)) return text.split(/\n+/).reduce((a, p) => a + splitWords(p).length, 0);
   return (text.match(/\S+/g) || []).length;
 }

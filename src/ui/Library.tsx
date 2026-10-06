@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchArticle, isUrl, linkFromShare } from '../core/article';
-import { plural } from './Backup';
 import { BACKUP_FORMAT, parseBackup, restoreBackup } from '../core/backup';
 import { extractText, titleFrom } from '../core/extract';
-import { SAMPLE, SAMPLE_TITLE } from '../core/sample';
+import { sampleFor } from '../core/sample';
 import { store, type DocMeta } from '../core/store';
 import { normaliseText, wordCount } from '../core/text';
+import { getLang, t } from '../i18n';
 import { Clip } from './icons';
 
 const ACCEPT = '.txt,.md,.markdown,.pdf,.docx,.epub,.odt,.rtf,.html,.htm,.xhtml,.srt,.vtt,.csv,.json,.xml,image/*,text/*';
@@ -44,7 +44,7 @@ export function Library({
     const clean = normaliseText(raw);
     const n = wordCount(clean);
     if (n < 5) {
-      setStatus({ msg: 'Not enough text to read.', err: true });
+      setStatus({ msg: t('home.tooShort'), err: true });
       return;
     }
     const meta = await store.addDoc(title, clean, n, opts?.source);
@@ -54,21 +54,21 @@ export function Library({
   }
 
   async function handleUrl(url: string) {
-    setStatus({ msg: 'Fetching…' });
+    setStatus({ msg: t('home.fetching') });
     try {
       const a = await fetchArticle(url, (msg) => setStatus({ msg }));
       await add(a.title, a.text, { source: a.url });
       setText('');
     } catch (e) {
       setText(url);
-      setStatus({ msg: e instanceof Error ? e.message : 'Could not fetch this page.', err: true });
+      setStatus({ msg: e instanceof Error ? e.message : t('home.fetchFailed'), err: true });
     }
   }
 
   async function handleFiles(files: FileList | File[]) {
     const file = files[0];
     if (!file) return;
-    setStatus({ msg: `Opening ${file.name}…` });
+    setStatus({ msg: t('home.opening', { name: file.name }) });
     try {
       // a dropped Lumen backup restores instead of opening as text
       if (/\.json$/i.test(file.name)) {
@@ -76,14 +76,14 @@ export function Library({
         if (raw.includes(BACKUP_FORMAT)) {
           const r = await restoreBackup(parseBackup(raw));
           setDocs(store.library());
-          setStatus({ msg: `Backup restored: ${plural(r.docsAdded, 'text')} and ${plural(r.sessionsAdded, 'session')} added.` });
+          setStatus({ msg: t('home.backupRestored', { texts: t('count.texts', { n: r.docsAdded }), sessions: t('count.sessions', { n: r.sessionsAdded }) }) });
           return;
         }
       }
       const raw = await extractText(file, (msg) => setStatus({ msg }));
       await add(file.name.replace(/\.[^.]+$/, ''), raw);
     } catch (e) {
-      setStatus({ msg: e instanceof Error ? e.message : 'Could not read this file.', err: true });
+      setStatus({ msg: e instanceof Error ? e.message : t('home.fileFailed'), err: true });
     }
   }
 
@@ -119,30 +119,30 @@ export function Library({
 
   return (
     <div className="page">
-      <h1>Read faster.<br />Understand more.</h1>
+      <h1>{t('home.title1')}<br />{t('home.title2')}</h1>
       <p className="lede">
-        Paste text or a link, or drop any file. Lumen paces you just above your comfort zone and checks that you still understand.
+        {t('home.lede')}
       </p>
 
       <div className={`drop${over ? ' over' : ''}`}>
         <textarea
-          aria-label="Text to read"
-          placeholder="Paste text or a link…"
+          aria-label={t('home.textLabel')}
+          placeholder={t('home.placeholder')}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         <div className="drop-bar">
           <input ref={fileRef} type="file" accept={ACCEPT} hidden onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-          <button className="ghost attach" onClick={() => fileRef.current?.click()} title="PDF, Word, EPUB, ODT, RTF, HTML, Markdown, text or a photo of a page">
-            <Clip /> Open file
+          <button className="ghost attach" onClick={() => fileRef.current?.click()} title={t('home.fileTypes')}>
+            <Clip /> {t('home.openFile')}
           </button>
-          <span className="hint">{isLink ? 'Link' : text ? `${wordCount(text).toLocaleString()} words` : ''}</span>
+          <span className="hint">{isLink ? t('home.link') : text ? t('home.words', { n: wordCount(text) }) : ''}</span>
           <button
             className="btn"
             disabled={!text.trim()}
             onClick={() => (isLink ? handleUrl(text.trim()) : add(titleFrom(text), text).then(() => setText('')))}
           >
-            {isLink ? 'Fetch article' : 'Read'}
+            {isLink ? t('home.fetch') : t('home.read')}
           </button>
         </div>
       </div>
@@ -150,19 +150,19 @@ export function Library({
 
       {!hasSessions && (
         <>
-          <button className="callout" onClick={() => add(SAMPLE_TITLE, SAMPLE, { baseline: true })}>
+          <button className="callout" onClick={() => { const s = sampleFor(getLang()); add(s.title, s.text, { baseline: true }); }}>
             <div>
-              <b>New here? Take the 2-minute speed test</b>
-              <span>Measures your natural speed and sets your starting pace.</span>
+              <b>{t('home.newTitle')}</b>
+              <span>{t('home.newSub')}</span>
             </div>
             <span aria-hidden>→</span>
           </button>
         </>
       )}
 
-      <h2>Library</h2>
+      <h2>{t('home.library')}</h2>
       {docs.length === 0 ? (
-        <div className="empty">Your texts will appear here.</div>
+        <div className="empty">{t('home.empty')}</div>
       ) : (
         <ul className="docs">
           {docs.map((d) => (
@@ -172,21 +172,21 @@ export function Library({
                   <div className="doc-title">{d.title}</div>
                   <div className="doc-meta">
                     {d.source && <span>{hostname(d.source)}</span>}
-                    <span>{d.words.toLocaleString()} words</span>
+                    <span>{t('home.words', { n: d.words })}</span>
                     <span className="bar"><span style={{ width: `${Math.min(100, (d.pos / Math.max(1, d.words)) * 100)}%` }} /></span>
                     <span>{Math.round((d.pos / Math.max(1, d.words)) * 100)} %</span>
                   </div>
                 </div>
                 <button
                   className="doc-del"
-                  aria-label={`Delete ${d.title}`}
+                  aria-label={t('home.deleteLabel', { title: d.title })}
                   onClick={async (e) => {
                     e.stopPropagation();
                     await store.removeDoc(d.id);
                     setDocs(store.library());
                   }}
                 >
-                  Delete
+                  {t('home.delete')}
                 </button>
               </div>
             </li>

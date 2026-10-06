@@ -20,6 +20,10 @@ Also:
 
 Deliberately excluded (not supported by evidence): RSVP/one-word-at-a-time display, multi-word "span" chunking, subvocalisation suppression, eye exercises, "whole-page" reading. See the in-app *Science* page for references.
 
+## Languages
+
+UI in English, Deutsch, Français, Italiano, Español, 中文 and Русский — follows the browser/OS language, overridable in the footer. The speed test uses a translated text in the active language; Chinese text is segmented into words with `Intl.Segmenter`.
+
 ## Install as an app
 
 Lumen is a PWA: use *Install* in the header (Chrome/Edge/Android) or *Share → Add to Home Screen* (iOS Safari). Once installed:

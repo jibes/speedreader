@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { SAMPLE, SAMPLE_TITLE } from '../core/sample';
+import { sampleFor } from '../core/sample';
 import { store, type DocMeta, type Settings } from '../core/store';
 import { wordCount } from '../core/text';
+import { getLang, LANGS, detectLang, resolveLang, setLang, t, type LangPref } from '../i18n';
+import { Globe } from './icons';
 import { Library } from './Library';
 import { Reader } from './Reader';
 import { Science } from './Science';
@@ -28,12 +30,19 @@ export default function App() {
     });
   }, []);
 
+  // language is module state read by t(); set it before children render
+  setLang(resolveLang(settings.lang));
+
   const setSettings = (p: Partial<Settings>) =>
     setAll((s) => {
       const n = { ...s, ...p };
       store.saveSettings(n);
       return n;
     });
+
+  useEffect(() => {
+    document.title = `Lumen — ${t('home.title1')} ${t('home.title2')}`;
+  }, [settings.lang]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -57,7 +66,8 @@ export default function App() {
   // speed test on fresh text: next unread passage of the latest document, else the sample
   async function retest() {
     const doc = store.library().find((d) => d.words - d.pos >= 150);
-    const meta = doc ?? (await store.addDoc(SAMPLE_TITLE, SAMPLE, wordCount(SAMPLE)));
+    const sample = sampleFor(getLang());
+    const meta = doc ?? (await store.addDoc(sample.title, sample.text, wordCount(sample.text)));
     setOpen({ meta, baseline: true });
   }
 
@@ -70,10 +80,10 @@ export default function App() {
       <header className="top">
         <button className="brand" onClick={() => setView('library')}><i />Lumen</button>
         <nav className="nav">
-          {install && <button onClick={install}>Install</button>}
-          {tab('library', 'Read')}
-          {tab('stats', 'Progress')}
-          {tab('science', 'Science')}
+          {install && <button onClick={install}>{t('nav.install')}</button>}
+          {tab('library', t('nav.read'))}
+          {tab('stats', t('nav.progress'))}
+          {tab('science', t('nav.science'))}
         </nav>
       </header>
       {view === 'library' && (
@@ -88,6 +98,18 @@ export default function App() {
       )}
       {view === 'stats' && <Stats onRetest={retest} />}
       {view === 'science' && <Science />}
+      <footer className="foot">
+        <label>
+          <Globe />
+          <span className="sr-only">{t('lang.label')}</span>
+          <select value={settings.lang} aria-label={t('lang.label')} onChange={(e) => setSettings({ lang: e.target.value as LangPref })}>
+            <option value="auto">{t('lang.auto', { lang: LANGS[detectLang()] })}</option>
+            {Object.entries(LANGS).map(([code, name]) => (
+              <option key={code} value={code}>{name}</option>
+            ))}
+          </select>
+        </label>
+      </footer>
     </div>
   );
 }

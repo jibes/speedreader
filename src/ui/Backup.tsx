@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { backupFilename, createBackup, parseBackup, restoreBackup } from '../core/backup';
+import { fmtDate, t } from '../i18n';
 
 const LAST = 'speedreader:lastBackup';
 
-export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function lastBackup(): number | null {
   try {
@@ -34,37 +34,34 @@ export function BackupPanel({ onRestored }: { onRestored: () => void }) {
       /* ignore */
     }
     setLast(Date.now());
-    setStatus({ msg: `Saved ${plural(b.docs.length, 'text')} and ${plural(b.sessions.length, 'session')}.` });
+    setStatus({ msg: t('backup.saved', { texts: t('count.texts', { n: b.docs.length }), sessions: t('count.sessions', { n: b.sessions.length }) }) });
   }
 
   async function restore(file: File) {
     try {
       const r = await restoreBackup(parseBackup(await file.text()));
       const parts = [
-        r.docsAdded && `${plural(r.docsAdded, 'text')} added`,
-        r.docsUpdated && `${r.docsUpdated} updated`,
-        r.sessionsAdded && `${plural(r.sessionsAdded, 'session')} added`,
+        r.docsAdded && t('backup.added', { x: t('count.texts', { n: r.docsAdded }) }),
+        r.docsUpdated && t('backup.updated', { n: r.docsUpdated }),
+        r.sessionsAdded && t('backup.added', { x: t('count.sessions', { n: r.sessionsAdded }) }),
       ].filter(Boolean);
-      setStatus({ msg: parts.length ? `Restored: ${parts.join(', ')}.` : 'Everything in this backup is already here.' });
+      setStatus({ msg: parts.length ? t('backup.restored', { list: parts.join(', ') }) : t('backup.nothingNew') });
       onRestored();
     } catch (e) {
-      setStatus({ msg: e instanceof Error ? e.message : 'Could not restore this file.', err: true });
+      setStatus({ msg: e instanceof Error ? e.message : t('backup.failed'), err: true });
     }
   }
 
   return (
     <>
-      <h2>Backup</h2>
+      <h2>{t('backup.title')}</h2>
       <div className="tile backup">
-        <p>
-          Your texts and progress live only in this browser. Save a backup file to keep them safe or move them to another device.
-          Restoring merges — nothing is deleted.
-        </p>
+        <p>{t('backup.body')}</p>
         <div className="backup-actions">
-          <span className="doc-meta">{last ? `Last backup ${new Date(last).toLocaleDateString()}` : 'No backup yet'}</span>
+          <span className="doc-meta">{last ? t('backup.last', { date: fmtDate(last, { dateStyle: 'medium' }) }) : t('backup.none')}</span>
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) restore(f); }} />
-          <button className="btn secondary" onClick={() => fileRef.current?.click()}>Restore</button>
-          <button className="btn" onClick={exportAll}>Export</button>
+          <button className="btn secondary" onClick={() => fileRef.current?.click()}>{t('backup.restore')}</button>
+          <button className="btn" onClick={exportAll}>{t('backup.export')}</button>
         </div>
         <div className={`status${status?.err ? ' err' : ''}`} role="status">{status?.msg}</div>
       </div>

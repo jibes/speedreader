@@ -1,4 +1,5 @@
 import { get, set, del, keys, createStore } from 'idb-keyval';
+import type { LangPref } from '../i18n';
 
 export interface DocMeta {
   id: string;
@@ -36,6 +37,8 @@ export interface Settings {
   fontSize: number;
   serif: boolean;
   theme: 'auto' | 'light' | 'sepia' | 'dark';
+  /** UI language; 'auto' follows the browser/OS */
+  lang: LangPref;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -44,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSize: 22,
   serif: true,
   theme: 'auto',
+  lang: 'auto',
 };
 
 /** training section length in words */
@@ -80,7 +84,7 @@ export const store = {
     // migrate pre-goal settings (training on/off)
     const goal = stored.goal ?? (stored.training === false ? 'read' : 'train');
     const s = { ...DEFAULT_SETTINGS, ...stored, goal };
-    return { goal: s.goal, wpm: s.wpm, fontSize: s.fontSize, serif: s.serif, theme: s.theme };
+    return { goal: s.goal, wpm: s.wpm, fontSize: s.fontSize, serif: s.serif, theme: s.theme, lang: s.lang };
   },
   saveSettings: (s: Settings) => lsSet('settings', s),
   library: () => lsArr<DocMeta>('library').sort((a, b) => b.opened - a.opened),

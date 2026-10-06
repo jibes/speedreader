@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { store, type Session } from '../core/store';
+import { fmtDate, t } from '../i18n';
 import { BackupPanel } from './Backup';
 
-const fmtDate = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 function minutes(ms: number) {
   const m = Math.round(ms / 60000);
-  return m < 60 ? `${m} min` : `${(m / 60).toFixed(1)} h`;
+  return m < 60 ? t('stats.min', { n: m }) : t('stats.h', { n: Math.round(m / 6) / 10 });
 }
 
 export function Stats({ onRetest }: { onRetest: () => void }) {
@@ -27,9 +27,9 @@ export function Stats({ onRetest }: { onRetest: () => void }) {
   if (!sessions.length) {
     return (
       <div className="page">
-        <h1>Progress</h1>
-        <p className="lede">Nothing yet. Read with the Train goal — your effective reading rate (speed × comprehension) will be tracked here.</p>
-        <button className="btn secondary" onClick={onRetest}>Take the speed test</button>
+        <h1>{t('stats.title')}</h1>
+        <p className="lede">{t('stats.empty')}</p>
+        <button className="btn secondary" onClick={onRetest}>{t('stats.takeTest')}</button>
         {backup}
       </div>
     );
@@ -37,35 +37,35 @@ export function Stats({ onRetest }: { onRetest: () => void }) {
 
   return (
     <div className="page">
-      <h1>Progress</h1>
-      <p className="lede">Effective rate = speed × comprehension. It is the only number that matters: reading fast without understanding is skimming.</p>
+      <h1>{t('stats.title')}</h1>
+      <p className="lede">{t('stats.lede')}</p>
       <div className="tiles">
-        <div className="tile"><b>{recentEff ?? '—'}</b><span>effective wpm (last 5)</span></div>
-        <div className="tile"><b>{gain === null ? '—' : `${gain > 0 ? '+' : ''}${gain}%`}</b><span>vs. first speed test</span></div>
-        <button className="tile tile-btn" onClick={onRetest} title="Measure your natural speed on fresh text">
+        <div className="tile"><b>{recentEff ?? '—'}</b><span>{t('stats.recent')}</span></div>
+        <div className="tile"><b>{gain === null ? '—' : `${gain > 0 ? '+' : ''}${gain}%`}</b><span>{t('stats.vsFirst')}</span></div>
+        <button className="tile tile-btn" onClick={onRetest} title={t('stats.retestTip')}>
           <b>{baseline ? baseline.wpm : '—'}</b>
-          <span>natural speed · {baseline ? 'retest →' : 'take test →'}</span>
+          <span>{t('stats.natural')} · {baseline ? t('stats.retest') : t('stats.takeTestShort')}</span>
         </button>
-        <div className="tile"><b>{words.toLocaleString()}</b><span>words · {minutes(ms)}</span></div>
+        <div className="tile"><b>{words.toLocaleString()}</b><span>{t('stats.words', { time: minutes(ms) })}</span></div>
       </div>
 
       {tested.length >= 2 && (
         <>
-          <h2>Effective reading rate</h2>
+          <h2>{t('stats.chart')}</h2>
           <Chart sessions={tested} />
         </>
       )}
 
-      <h2>Sessions</h2>
+      <h2>{t('stats.sessions')}</h2>
       <table className="sessions">
         <thead>
-          <tr><th>Date</th><th>Words</th><th>Speed</th><th>Compr.</th><th>Effective</th></tr>
+          <tr><th>{t('stats.date')}</th><th>{t('stats.colWords')}</th><th>{t('stats.speed')}</th><th>{t('stats.compr')}</th><th>{t('stats.eff')}</th></tr>
         </thead>
         <tbody>
           {[...sessions].reverse().slice(0, 30).map((s, i) => (
             <tr key={i}>
-              <td>{fmtDate(s.at)}{s.baseline ? ' · test' : s.goal === 'skim' ? ' · skim' : s.mode === 'focus' ? ' · focus' : ''}</td>
-              <td>{s.words}</td>
+              <td>{fmtDate(s.at)}{s.baseline ? ` · ${t('stats.tagTest')}` : s.goal === 'skim' ? ` · ${t('stats.tagSkim')}` : s.mode === 'focus' ? ` · ${t('stats.tagFocus')}` : ''}</td>
+              <td>{s.words.toLocaleString()}</td>
               <td>{s.wpm}</td>
               <td>{s.accuracy === undefined ? '—' : `${Math.round(s.accuracy * 100)}%`}</td>
               <td>{s.accuracy === undefined || s.goal === 'skim' ? '—' : Math.round(s.wpm * s.accuracy)}</td>
@@ -97,7 +97,7 @@ function Chart({ sessions }: { sessions: Session[] }) {
       <svg
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label="Effective reading rate per session"
+        aria-label={t('stats.chartLabel')}
         onMouseMove={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           const px = ((e.clientX - r.left) / r.width) * W;
@@ -105,10 +105,10 @@ function Chart({ sessions }: { sessions: Session[] }) {
           setHover(Math.max(0, Math.min(pts.length - 1, i)));
         }}
       >
-        {ticks.map((t) => (
-          <g key={t}>
-            <line className="grid" x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} />
-            <text className="axis" x={pad.l - 8} y={y(t) + 4} textAnchor="end">{t}</text>
+        {ticks.map((v) => (
+          <g key={v}>
+            <line className="grid" x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} />
+            <text className="axis" x={pad.l - 8} y={y(v) + 4} textAnchor="end">{v}</text>
           </g>
         ))}
         <text className="axis" x={pad.l} y={H - 4}>{fmtDate(sessions[0].at)}</text>
@@ -126,7 +126,7 @@ function Chart({ sessions }: { sessions: Session[] }) {
       </svg>
       {hover !== null && (
         <div className="tip" style={{ left: `${Math.min(85, Math.max(15, (x(hover) / W) * 100))}%`, top: `${(y(pts[hover]) / H) * 100}%` }}>
-          <b>{pts[hover]} wpm</b> · {sessions[hover].wpm} × {Math.round(sessions[hover].accuracy! * 100)}%{sessions[hover].baseline ? ' · test' : ''}
+          <b>{pts[hover]} {t('wpm')}</b> · {sessions[hover].wpm} × {Math.round(sessions[hover].accuracy! * 100)}%{sessions[hover].baseline ? ` · ${t('stats.tagTest')}` : ''}
         </div>
       )}
     </div>

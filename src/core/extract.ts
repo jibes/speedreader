@@ -1,4 +1,5 @@
 /** Turn any text-bearing file into plain text. Heavy parsers are lazy-loaded. */
+import { t } from '../i18n';
 import { OCR_LANGS, ocrBase } from './ocrPrefetch';
 
 export type Progress = (msg: string) => void;
@@ -21,7 +22,7 @@ export async function extractText(file: File, onProgress: Progress = () => {}): 
   if (e === 'md' || e === 'markdown') return markdown(await file.text());
   // fall back to text if it decodes cleanly
   const text = await file.text();
-  if (/\u0000/.test(text.slice(0, 2000))) throw new Error(`Unsupported file type: .${e}`);
+  if (/\u0000/.test(text.slice(0, 2000))) throw new Error(t('err.unsupported', { ext: e }));
   return text;
 }
 
@@ -86,7 +87,7 @@ async function pdf(file: File, onProgress: Progress): Promise<string> {
   const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
   const pages: string[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
-    onProgress(`Reading page ${i} of ${doc.numPages}`);
+    onProgress(t('prog.page', { i, n: doc.numPages }));
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
     let lastY: number | null = null;
@@ -106,7 +107,7 @@ async function pdf(file: File, onProgress: Progress): Promise<string> {
   }
   const joined = pages.join('\n\n');
   if (joined.replace(/\s/g, '').length < 20 * doc.numPages) {
-    throw new Error('This PDF has no text layer (scanned?). Export pages as images to use OCR.');
+    throw new Error(t('err.pdfNoText'));
   }
   return joined;
 }
@@ -121,7 +122,7 @@ async function odt(file: File): Promise<string> {
   const JSZip = (await import('jszip')).default;
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const xml = await zip.file('content.xml')?.async('string');
-  if (!xml) throw new Error('Invalid ODT file');
+  if (!xml) throw new Error(t('err.odt'));
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   const out: string[] = [];
   doc.querySelectorAll('*').forEach((n) => {
@@ -138,7 +139,7 @@ async function epub(file: File, onProgress: Progress): Promise<string> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const container = await zip.file('META-INF/container.xml')?.async('string');
   const opfPath = container?.match(/full-path="([^"]+)"/)?.[1];
-  if (!opfPath) throw new Error('Invalid EPUB: no package file');
+  if (!opfPath) throw new Error(t('err.epub'));
   const opf = new DOMParser().parseFromString(await zip.file(opfPath)!.async('string'), 'application/xml');
   const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
   const manifest = new Map<string, string>();
@@ -148,18 +149,18 @@ async function epub(file: File, onProgress: Progress): Promise<string> {
   for (let k = 0; k < spine.length; k++) {
     const href = spine[k];
     if (!href) continue;
-    onProgress(`Reading chapter ${k + 1} of ${spine.length}`);
+    onProgress(t('prog.chapter', { i: k + 1, n: spine.length }));
     const f = zip.file(base + decodeURIComponent(href));
     if (!f) continue;
-    const t = htmlToText(await f.async('string'));
-    if (t.trim()) parts.push(t);
+    const chapter = htmlToText(await f.async('string'));
+    if (chapter.trim()) parts.push(chapter);
   }
   return parts.join('\n\n');
 }
 
 async function ocr(file: File, onProgress: Progress): Promise<string> {
   const { createWorker } = await import('tesseract.js');
-  onProgress('Loading text recognition…');
+  onProgress(t('prog.ocrLoad'));
   const base = ocrBase();
   const worker = await createWorker(OCR_LANGS, 1, {
     workerPath: base + 'worker.min.js',
@@ -167,7 +168,7 @@ async function ocr(file: File, onProgress: Progress): Promise<string> {
     langPath: base + 'lang',
     workerBlobURL: false,
     logger: (m: { status: string; progress: number }) => {
-      if (m.status === 'recognizing text') onProgress(`Recognising text ${Math.round(m.progress * 100)} %`);
+      if (m.status === 'recognizing text') onProgress(t('prog.ocr', { p: Math.round(m.progress * 100) }));
     },
   });
   try {

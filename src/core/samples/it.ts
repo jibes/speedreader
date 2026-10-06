@@ -1,0 +1,20 @@
+export default {
+  title: 'Come leggono davvero i tuoi occhi',
+  text: `Come leggono davvero i tuoi occhi
+
+Mentre leggi questa frase, ti sembra che gli occhi scorrano dolcemente lungo la riga. Non è così. Gli occhi si muovono con una serie di salti rapidi chiamati saccadi, ognuno dei quali dura solo da venti a quaranta millisecondi, separati da brevi pause chiamate fissazioni. Durante una saccade sei praticamente cieco; quasi tutto ciò che ricavi dalla pagina arriva durante le fissazioni, che di solito durano circa un quarto di secondo.
+
+In ogni fissazione, la visione nitida copre solo una minuscola area di circa due gradi attorno al punto che stai guardando. Sono più o meno sette o otto lettere alla normale distanza di lettura. Più lontano, le lettere diventano rapidamente sfocate. Questa finestra stretta si chiama span percettivo e, per chi legge lingue europee, è asimmetrica: si estende per circa quindici caratteri a destra del punto di fissazione, ma solo tre o quattro a sinistra. Il cervello usa l’anteprima sfocata a destra per pianificare dove atterrerà il salto successivo e per iniziare a riconoscere la parola seguente prima che gli occhi ci arrivino.
+
+I ricercatori hanno scoperto questi fatti con una tecnica ingegnosa chiamata finestra mobile. Un computer segue gli occhi e sostituisce con una x ogni lettera che si trova fuori da una piccola finestra. Quando la finestra è più piccola dello span percettivo naturale, la lettura rallenta. Quando è più grande, la lettura non accelera. La conclusione ha sorpreso molti venditori di corsi di lettura veloce: l’occhio non può essere allenato a cogliere un’intera riga o un’intera pagina in una volta. I limiti sono fissati dall’anatomia della retina.
+
+Non tutte le parole ricevono una fissazione. Le parole brevi e frequenti come il, e o di vengono saltate circa due volte su tre, perché possono essere riconosciute nell’anteprima. Le parole lunghe e insolite, invece, vengono spesso fissate due volte e più a lungo. I lettori fanno anche una pausa alla fine di una proposizione o di una frase per integrarne il significato. Circa una saccade su sette torna indietro. Queste regressioni non sono una cattiva abitudine; di solito riparano un fraintendimento, e quando vengono impedite la comprensione delle frasi difficili cala.
+
+Da dove viene allora la velocità di un buon lettore? Grandi studi indicano la competenza linguistica piuttosto che i movimenti oculari. I lettori esperti riconoscono le parole più in fretta perché le hanno incontrate molte volte. Hanno un vocabolario ampio, ricche conoscenze di base e pratica con il tipo di testo che hanno davanti. Una fisica legge un articolo di fisica più velocemente di uno storico, e lo storico vince la gara su un libro dedicato all’Impero romano.
+
+Questo non significa che la velocità di lettura sia fissa. La maggior parte delle persone può leggere sensibilmente più veloce del solito, almeno con materiale facile, se è spinta da una guida e accetta una piccola perdita di dettagli. La misura onesta del progresso non sono le parole al minuto, ma la velocità di lettura effettiva: la velocità moltiplicata per la quota di contenuto che hai davvero capito. Raddoppiare la velocità dimezzando la comprensione non porta a nulla.
+
+Scorrere un testo è un’abilità distinta e legittima. Quando ti serve solo il senso generale, campionare di proposito titoli, prime frasi e termini chiave ti porta lì molto più in fretta che leggere ogni parola. Il trucco è sapere quale obiettivo hai prima di cominciare, e rallentare di nuovo quando il materiale diventa importante o difficile.
+
+Il metodo di questa app segue queste scoperte. Scandisce la tua lettura in modo da spingerti appena oltre la velocità comoda, si sofferma come gli occhi sulla punteggiatura e sulle parole lunghe e mantiene il testo visibile perché tu possa tornare indietro quando serve. Dopo ogni sezione fa qualche domanda rapida. Se rispondi bene, il ritmo aumenta. Se cominci a perdere dettagli, rallenta. Col tempo trovi la velocità più alta alla quale capisci ancora ciò che leggi, e con la pratica costante quella velocità tende a crescere.`,
+};

@@ -1,4 +1,5 @@
 /** Export / restore library (texts + positions), progress and settings as one JSON file. */
+import { t } from '../i18n';
 import { store, type DocMeta, type Session, type Settings } from './store';
 
 export const BACKUP_FORMAT = 'lumen-backup';
@@ -44,13 +45,13 @@ export function parseBackup(json: string): Backup {
   try {
     data = JSON.parse(json);
   } catch {
-    throw new Error('This is not a Lumen backup file.');
+    throw new Error(t('err.notBackup'));
   }
   const b = data as Partial<Backup>;
   if (b?.format !== BACKUP_FORMAT || !Array.isArray(b.docs) || !Array.isArray(b.sessions)) {
-    throw new Error('This is not a Lumen backup file.');
+    throw new Error(t('err.notBackup'));
   }
-  if ((b.version ?? 0) > BACKUP_VERSION) throw new Error('This backup is from a newer version of Lumen.');
+  if ((b.version ?? 0) > BACKUP_VERSION) throw new Error(t('err.newerBackup'));
   return b as Backup;
 }
 

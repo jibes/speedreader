@@ -18,8 +18,10 @@ export interface Question {
 
 const strip = (w: string) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 
-function isContent(w: string) {
-  return w.length >= 4 && !isCommon(w) && /\p{L}/u.test(w);
+/** content word: 4+ letters, or 2+ Han characters (CJK words are short) */
+export function isContent(w: string) {
+  const min = /\p{Script=Han}/u.test(w) ? 2 : 4;
+  return w.length >= min && !isCommon(w) && /\p{L}/u.test(w);
 }
 
 function shapeScore(a: string, b: string) {
@@ -76,8 +78,9 @@ export function makeQuiz(doc: Doc, from: number, to: number, n = 3, rnd: () => n
     if (distractors.length < 3) continue;
     used.add(word.toLowerCase());
     const prompt = idxs
-      .map((i) => (i === target ? doc.tokens[i].text.replace(word, '_____') : doc.tokens[i].text))
-      .join(' ');
+      .map((i) => (i === target ? doc.tokens[i].text.replace(word, '_____') : doc.tokens[i].text) + (doc.tokens[i].gap ? ' ' : ''))
+      .join('')
+      .trim();
     const options = shuffle([word, ...distractors], rnd);
     picked.push({ prompt, options, answer: options.indexOf(word) });
   }
