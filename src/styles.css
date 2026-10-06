@@ -262,6 +262,13 @@ table.sessions { width: 100%; border-collapse: collapse; font-size: 14px; font-v
 .sessions td { padding: 8px; border-bottom: 1px solid var(--line); }
 .sessions td:not(:first-child), .sessions th:not(:first-child) { text-align: right; }
 
+/* backup */
+.backup p { margin: 0 0 14px; color: var(--ink-2); font-size: 14.5px; max-width: 60ch; }
+.backup-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.backup-actions .doc-meta { margin-right: auto; }
+.backup .status { margin-top: 8px; min-height: 0; }
+@media (max-width: 600px) { .backup-actions .doc-meta { flex: 1 1 100%; } }
+
 /* science */
 .prose { max-width: 64ch; }
 .prose p, .prose li { color: var(--ink-2); }

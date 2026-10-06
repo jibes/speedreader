@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchArticle, isUrl, linkFromShare } from '../core/article';
+import { plural } from './Backup';
+import { BACKUP_FORMAT, parseBackup, restoreBackup } from '../core/backup';
 import { extractText, titleFrom } from '../core/extract';
 import { SAMPLE, SAMPLE_TITLE } from '../core/sample';
 import { store, type DocMeta } from '../core/store';
@@ -67,6 +69,16 @@ export function Library({
     if (!file) return;
     setStatus({ msg: `Opening ${file.name}…` });
     try {
+      // a dropped Lumen backup restores instead of opening as text
+      if (/\.json$/i.test(file.name)) {
+        const raw = await file.text();
+        if (raw.includes(BACKUP_FORMAT)) {
+          const r = await restoreBackup(parseBackup(raw));
+          setDocs(store.library());
+          setStatus({ msg: `Backup restored: ${plural(r.docsAdded, 'text')} and ${plural(r.sessionsAdded, 'session')} added.` });
+          return;
+        }
+      }
       const raw = await extractText(file, (msg) => setStatus({ msg }));
       await add(file.name.replace(/\.[^.]+$/, ''), raw);
     } catch (e) {

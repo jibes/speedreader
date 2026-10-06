@@ -93,6 +93,11 @@ export const store = {
     store.saveMeta(meta);
     return meta;
   },
+  /** insert a document with a known id (restore) */
+  async putDoc(meta: DocMeta, text: string) {
+    await set(meta.id, text, texts);
+    store.saveMeta(meta);
+  },
   text: (id: string) => get<string>(id, texts),
   async removeDoc(id: string) {
     await del(id, texts);
@@ -102,6 +107,9 @@ export const store = {
   addSession(s: Session) {
     const all = lsArr<Session>('sessions');
     all.push(s);
+    lsSet('sessions', all.slice(-2000));
+  },
+  setSessions(all: Session[]) {
     lsSet('sessions', all.slice(-2000));
   },
   /** remove orphan texts */
