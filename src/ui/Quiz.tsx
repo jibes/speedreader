@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Question } from '../core/quiz';
+import { t } from '../i18n';
 
 export function Quiz({ questions, onDone }: { questions: Question[]; onDone: (correct: number) => void }) {
   const [i, setI] = useState(0);
@@ -36,11 +37,11 @@ export function Quiz({ questions, onDone }: { questions: Question[]; onDone: (co
   return (
     <div className="scrim">
       <div className="sheet" role="dialog" aria-label="Comprehension check">
-        <h3>Quick check</h3>
-        <p className="sub">{gist ? 'Only one of these topics was in that section.' : 'Which word completes the sentence you just read?'}</p>
+        <h3>{t('quiz.title')}</h3>
+        <p className="sub">{gist ? t('quiz.gistSub') : t('quiz.cloze')}</p>
         <p className="q-prompt">
           {gist ? (
-            q.prompt
+            t('quiz.gistPrompt')
           ) : (
             <>
               {before}
@@ -62,7 +63,7 @@ export function Quiz({ questions, onDone }: { questions: Question[]; onDone: (co
           ))}
         </div>
         <div className="q-foot">
-          <span className="keys">Press 1–{q.options.length}</span>
+          <span className="keys">{t('quiz.keys', { n: q.options.length })}</span>
           <span className="dots">{questions.map((_, k) => <i key={k} className={k <= i ? 'on' : ''} />)}</span>
         </div>
       </div>
@@ -99,26 +100,26 @@ export function Result({ r, onContinue, onClose, onRetry }: { r: ResultInfo; onC
     return (
       <div className="scrim">
         <div className="sheet result" role="dialog" aria-label="Result">
-          <h3>Too fast to measure</h3>
-          <p className="note">That was quicker than reading is physically possible — probably skimmed. Nothing was saved.</p>
+          <h3>{t('result.tooFast')}</h3>
+          <p className="note">{t('result.tooFastBody')}</p>
           <div className="actions">
-            <button className="btn secondary" onClick={onClose}>Not now</button>
-            {onRetry && <button className="btn" autoFocus onClick={onRetry}>Try again</button>}
+            <button className="btn secondary" onClick={onClose}>{t('result.notNow')}</button>
+            {onRetry && <button className="btn" autoFocus onClick={onRetry}>{t('result.retry')}</button>}
           </div>
         </div>
       </div>
     );
   }
 
-  const label = r.baseline ? 'Your natural reading speed' : r.skim ? 'Skimming speed' : 'Effective reading rate';
+  const label = r.baseline ? t('result.natural') : r.skim ? t('result.skim') : t('result.effective');
   const big = r.baseline || r.skim ? r.wpm : eff;
-  const line = r.skim ? `${pct} % of topics caught` : r.baseline ? `${pct} % understood` : `${r.wpm} wpm × ${pct} % understood`;
+  const line = r.skim ? t('result.topics', { p: pct }) : r.baseline ? t('result.understood', { p: pct }) : t('result.speedTimes', { wpm: r.wpm, p: pct });
   let note = '';
-  if (r.skim) note = r.accuracy >= 0.66 ? 'You caught the main topics.' : 'Topics slipped — slow down a little or skim with a question in mind.';
-  else if (r.baseline && r.nextWpm) note = `Training starts at ${r.nextWpm} wpm — just above your comfort zone.`;
+  if (r.skim) note = r.accuracy >= 0.66 ? t('result.skimGood') : t('result.skimBad');
+  else if (r.baseline && r.nextWpm) note = t('result.trainStart', { wpm: r.nextWpm });
   else if (r.nextWpm !== undefined) {
     const d = r.nextWpm - r.wpm;
-    note = d > 0 ? `Good understanding — speeding up to ${r.nextWpm} wpm.` : d < 0 ? `Some details slipped — easing to ${r.nextWpm} wpm.` : `Holding at ${r.nextWpm} wpm.`;
+    note = t(d > 0 ? 'result.up' : d < 0 ? 'result.down' : 'result.hold', { wpm: r.nextWpm });
   }
   return (
     <div className="scrim">
@@ -126,13 +127,13 @@ export function Result({ r, onContinue, onClose, onRetry }: { r: ResultInfo; onC
         <p className="sub" style={{ margin: 0 }}>{label}</p>
         <div className="big">
           {big}
-          <small>wpm</small>
+          <small>{t('wpm')}</small>
         </div>
         <p className="line">{line}</p>
         {note && <p className="note">{note}</p>}
         <div className="actions">
-          <button className="btn secondary" onClick={onClose}>Pause</button>
-          <button className="btn" autoFocus onClick={onContinue}>Continue</button>
+          <button className="btn secondary" onClick={onClose}>{t('result.pause')}</button>
+          <button className="btn" autoFocus onClick={onContinue}>{t('result.continue')}</button>
         </div>
       </div>
     </div>

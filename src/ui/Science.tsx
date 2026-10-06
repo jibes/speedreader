@@ -1,58 +1,42 @@
+import { t, type Key } from '../i18n';
+
+const EVIDENCE = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'] as const;
+const MYTHS = ['m1', 'm2', 'm3', 'm4', 'm5'] as const;
+
+function Item({ id, pill, ok }: { id: string; pill: string; ok?: boolean }) {
+  return (
+    <li>
+      <span className={`pill${ok ? ' ok' : ''}`}>{pill}</span>
+      <strong>{t(`sci.${id}.t` as Key)}</strong> {t(`sci.${id}.b` as Key)}
+    </li>
+  );
+}
+
 export function Science() {
   return (
     <div className="page prose">
-      <h1>What the science says</h1>
-      <p className="lede">
-        Most speed-reading claims don't survive contact with eye-tracking research. Lumen is built only on what does.
-      </p>
+      <h1>{t('sci.title')}</h1>
+      <p className="lede">{t('sci.lede')}</p>
 
-      <h2>What Lumen does — and why</h2>
+      <h2>{t('sci.does')}</h2>
       <ul>
-        <li>
-          <span className="pill ok">Evidence</span><strong>Measures effective rate, not raw speed.</strong> Speed and comprehension trade off
-          (Rayner et al., 2016). Your score is WPM × comprehension, checked with cloze questions — a validated comprehension proxy (Taylor, 1953).
-        </li>
-        <li>
-          <span className="pill ok">Evidence</span><strong>Adapts the pace to you.</strong> An up/down staircase (Kaernbach, 1991) raises speed when you
-          understand well and eases off when you don't, converging on the fastest pace that keeps ~75&nbsp;% comprehension.
-        </li>
-        <li>
-          <span className="pill ok">Evidence</span><strong>Times words like your eyes do.</strong> Long and rare words get more time, short frequent ones less
-          (Kliegl et al., 2004); clause and sentence ends get a pause for integration (Just &amp; Carpenter, 1980). Averaged out, the speed shown is exact.
-        </li>
-        <li>
-          <span className="pill ok">Evidence</span><strong>The pacer keeps the page.</strong> About 10–15&nbsp;% of eye movements are regressions, and blocking them
-          hurts comprehension (Schotter, Tran &amp; Rayner, 2014). The pacer pushes you forward but lets you look back and preview the next words.
-        </li>
-        <li>
-          <span className="pill ok">Evidence</span><strong>Skim when you only need the gist.</strong> Skimming is a legitimate, different skill: good
-          skimmers sample information-dense parts — first sentences, key terms — and accept losing detail (Duggan &amp; Payne, 2009; Rayner et al., 2016).
-          Skim mode keeps those parts at your pace, sweeps past the rest, and checks topics instead of words.
-        </li>
-        <li>
-          <span className="pill ok">Evidence</span><strong>Practice with real text.</strong> The strongest predictor of reading speed is language skill —
-          vocabulary and familiarity with the material (Rayner et al., 2016). Regular, varied reading at a slightly challenging pace is the training.
-        </li>
+        {EVIDENCE.map((id) => <Item key={id} id={id} pill={t('sci.evidence')} ok />)}
       </ul>
 
-      <h2>What Lumen deliberately leaves out</h2>
+      <h2>{t('sci.leaves')}</h2>
       <ul>
-        <li><span className="pill">Myth</span><strong>Reading whole lines or pages at a glance.</strong> Sharp vision spans ~7–8 letters; the perceptual span can't be trained past ~15 characters (Rayner, 1998).</li>
-        <li><span className="pill">Myth</span><strong>Eliminating subvocalisation.</strong> Inner speech supports comprehension; suppressing it lowers understanding of complex text.</li>
-        <li><span className="pill">Myth</span><strong>Eye-muscle exercises.</strong> Saccade speed isn't the bottleneck — word recognition and comprehension are.</li>
-        <li><span className="pill">Myth</span><strong>Flashing words one at a time (RSVP).</strong> Popular in apps, but it removes look-backs and lowers comprehension of real text (Schotter et al., 2014; Benedetto et al., 2015). Lumen uses a pacer over the full page instead.</li>
-        <li><span className="pill">Myth</span><strong>1,000+ wpm with full comprehension.</strong> Above ~500–600 wpm, measured comprehension drops toward skimming levels.</li>
+        {MYTHS.map((id) => <Item key={id} id={id} pill={t('sci.myth')} />)}
       </ul>
 
-      <h2>How to train</h2>
+      <h2>{t('sci.how')}</h2>
       <ol>
-        <li>Take the speed test to find your natural pace.</li>
-        <li>Read 10–20 minutes a day with the Train goal, using material you actually want to read.</li>
-        <li>Let the pace adapt. If comprehension stays high, you're getting faster for real.</li>
-        <li>Retest every couple of weeks on fresh text — that's your honest progress.</li>
+        <li>{t('sci.h1')}</li>
+        <li>{t('sci.h2')}</li>
+        <li>{t('sci.h3')}</li>
+        <li>{t('sci.h4')}</li>
       </ol>
 
-      <h2>References</h2>
+      <h2>{t('sci.refs')}</h2>
       <ul className="refs">
         <li>Rayner, K., Schotter, E. R., Masson, M. E. J., Potter, M. C., &amp; Treiman, R. (2016). So much to read, so little time: How do we read, and can speed reading help? <em>Psychological Science in the Public Interest, 17</em>(1), 4–34.</li>
         <li>Rayner, K. (1998). Eye movements in reading and information processing: 20 years of research. <em>Psychological Bulletin, 124</em>(3), 372–422.</li>
