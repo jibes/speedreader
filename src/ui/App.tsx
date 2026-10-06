@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { SAMPLE, SAMPLE_TITLE } from '../core/sample';
 import { store, type DocMeta, type Settings } from '../core/store';
+import { wordCount } from '../core/text';
 import { Library } from './Library';
 import { Reader } from './Reader';
 import { Science } from './Science';
@@ -52,6 +54,13 @@ export default function App() {
     );
   }
 
+  // speed test on fresh text: next unread passage of the latest document, else the sample
+  async function retest() {
+    const doc = store.library().find((d) => d.words - d.pos >= 150);
+    const meta = doc ?? (await store.addDoc(SAMPLE_TITLE, SAMPLE, wordCount(SAMPLE)));
+    setOpen({ meta, baseline: true });
+  }
+
   const tab = (v: View, label: string) => (
     <button aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>{label}</button>
   );
@@ -77,7 +86,7 @@ export default function App() {
           }}
         />
       )}
-      {view === 'stats' && <Stats />}
+      {view === 'stats' && <Stats onRetest={retest} />}
       {view === 'science' && <Science />}
     </div>
   );

@@ -100,61 +100,6 @@ export function buildDoc(text: string): Doc {
   return { tokens, sentenceStarts, paragraphStarts };
 }
 
-/** Optimal recognition point: slightly left of centre (O'Regan & Jacobs 1992). */
-export function orpIndex(word: string): number {
-  const lead = word.match(/^[^\p{L}\p{N}]*/u)?.[0].length ?? 0;
-  const core = word.length - lead - (word.match(/[^\p{L}\p{N}]*$/u)?.[0].length ?? 0);
-  const n = Math.max(core, 1);
-  const i = n <= 1 ? 0 : n <= 5 ? 1 : n <= 9 ? 2 : n <= 13 ? 3 : 4;
-  return Math.min(lead + i, word.length - 1);
-}
-
-export interface Chunk {
-  start: number;
-  end: number; // exclusive
-  /** weight sum */
-  w: number;
-}
-
-/**
- * Group tokens into meaning units of up to `size` words, never crossing
- * sentence boundaries and preferring to break at clauses. Short function
- * words attach forward ("of the" + noun) as in phrase-based chunking.
- */
-export function buildChunks(doc: Doc, size: number, maxChars = 22): Chunk[] {
-  const chunks: Chunk[] = [];
-  const t = doc.tokens;
-  let i = 0;
-  while (i < t.length) {
-    let j = i;
-    let chars = 0;
-    let w = 0;
-    while (j < t.length) {
-      const len = t[j].text.length;
-      if (j > i && (j - i >= size || chars + len + 1 > maxChars)) break;
-      chars += len + 1;
-      w += t[j].w;
-      j++;
-      if (t[j - 1].end !== 'none') break;
-    }
-    // avoid ending a multi-word chunk on a dangling function word
-    if (j - i > 1 && j < t.length && t[j - 1].end === 'none' && isFunctionWord(t[j - 1].text)) {
-      j--;
-      w -= t[j].w;
-    }
-    chunks.push({ start: i, end: j, w });
-    i = j;
-  }
-  return chunks;
-}
-
-const FUNCTION_WORDS = new Set(
-  'a an the of to in on at by for with from as and or but if than that this these those is are was were be been its it his her their our your my der die das den dem des ein eine einen einem einer und oder zu im am vom zum zur mit von für auf an bei aus nach als wie'.split(' '),
-);
-function isFunctionWord(w: string) {
-  return FUNCTION_WORDS.has(w.toLowerCase());
-}
-
 export function wordCount(text: string): number {
   return (text.match(/\S+/g) || []).length;
 }

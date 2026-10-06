@@ -9,15 +9,9 @@ export const Pause = () => (
 export const Back = () => (
   <svg viewBox="0 0 24 24" {...P}><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" /></svg>
 );
-export const Fwd = () => (
-  <svg viewBox="0 0 24 24" {...P}><path d="M13 17l5-5-5-5M6 17l5-5-5-5" /></svg>
-);
 export const Close = () => (
   <svg viewBox="0 0 24 24" {...P}><path d="M18 6L6 18M6 6l12 12" /></svg>
 );
 export const Sliders = () => (
   <svg viewBox="0 0 24 24" {...P}><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
-);
-export const Gauge = () => (
-  <svg viewBox="0 0 24 24" {...P}><path d="M12 14l4-4" /><path d="M3.3 17a10 10 0 1 1 17.4 0" /></svg>
 );

@@ -31,16 +31,23 @@ export function Quiz({ questions, onDone }: { questions: Question[]; onDone: (co
     return () => window.removeEventListener('keydown', key);
   });
 
+  const gist = q.kind === 'gist';
   const [before, after] = q.prompt.split('_____');
   return (
     <div className="scrim">
       <div className="sheet" role="dialog" aria-label="Comprehension check">
         <h3>Quick check</h3>
-        <p className="sub">Which word completes the sentence you just read?</p>
+        <p className="sub">{gist ? 'Only one of these topics was in that section.' : 'Which word completes the sentence you just read?'}</p>
         <p className="q-prompt">
-          {before}
-          <b>_____</b>
-          {after}
+          {gist ? (
+            q.prompt
+          ) : (
+            <>
+              {before}
+              <b>_____</b>
+              {after}
+            </>
+          )}
         </p>
         <div className="opts">
           {q.options.map((o, k) => (
@@ -69,6 +76,8 @@ export interface ResultInfo {
   nextWpm?: number;
   baseline?: boolean;
   invalid?: boolean;
+  /** skim: wpm is coverage speed, accuracy is gist */
+  skim?: boolean;
 }
 
 export function Result({ r, onContinue, onClose }: { r: ResultInfo; onContinue: () => void; onClose?: () => void }) {
@@ -87,16 +96,28 @@ export function Result({ r, onContinue, onClose }: { r: ResultInfo; onContinue: 
   return (
     <div className="scrim">
       <div className="sheet result" role="dialog" aria-label="Result">
-        <p className="sub" style={{ margin: 0 }}>{r.baseline ? 'Your natural reading speed' : 'Effective reading rate'}</p>
+        <p className="sub" style={{ margin: 0 }}>{r.baseline ? 'Your natural reading speed' : r.skim ? 'Skimming speed' : 'Effective reading rate'}</p>
         <div className="big">
-          {r.baseline ? r.wpm : eff}
+          {r.baseline || r.skim ? r.wpm : eff}
           <small>wpm</small>
         </div>
-        <div className="kv">
-          <div><b>{r.wpm}</b><span>speed</span></div>
-          <div><b>{Math.round(r.accuracy * 100)}%</b><span>comprehension</span></div>
-          <div><b>{eff}</b><span>effective</span></div>
-        </div>
+        {r.skim ? (
+          <div className="kv kv-2">
+            <div><b>{r.wpm}</b><span>words covered / min</span></div>
+            <div><b>{Math.round(r.accuracy * 100)}%</b><span>gist</span></div>
+          </div>
+        ) : (
+          <div className="kv">
+            <div><b>{r.wpm}</b><span>speed</span></div>
+            <div><b>{Math.round(r.accuracy * 100)}%</b><span>comprehension</span></div>
+            <div><b>{eff}</b><span>effective</span></div>
+          </div>
+        )}
+        {r.skim && (
+          <p className="sub">
+            {r.accuracy >= 0.67 ? 'You caught the main topics.' : 'Topics slipped — slow the pace a little or skim with a question in mind.'}
+          </p>
+        )}
         {r.invalid && <p className="sub">That's faster than reading is physically possible — probably skimmed. Not saved; try the test again.</p>}
         {r.nextWpm !== undefined && (
           <p className="sub">

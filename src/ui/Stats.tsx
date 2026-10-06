@@ -9,11 +9,12 @@ function minutes(ms: number) {
   return m < 60 ? `${m} min` : `${(m / 60).toFixed(1)} h`;
 }
 
-export function Stats() {
+export function Stats({ onRetest }: { onRetest: () => void }) {
   const [version, setVersion] = useState(0);
   const sessions = useMemo(() => store.sessions(), [version]);
   const backup = <BackupPanel onRestored={() => setVersion((v) => v + 1)} />;
-  const tested = sessions.filter((s) => s.accuracy !== undefined);
+  // effective rate only makes sense for full reading, not skimming
+  const tested = sessions.filter((s) => s.accuracy !== undefined && s.goal !== 'skim');
   const words = sessions.reduce((a, s) => a + s.words, 0);
   const ms = sessions.reduce((a, s) => a + s.ms, 0);
   const baseline = [...sessions].reverse().find((s) => s.baseline);
@@ -27,7 +28,8 @@ export function Stats() {
     return (
       <div className="page">
         <h1>Progress</h1>
-        <p className="lede">Nothing yet. Read with training on — your effective reading rate (speed × comprehension) will be tracked here.</p>
+        <p className="lede">Nothing yet. Read with the Train goal — your effective reading rate (speed × comprehension) will be tracked here.</p>
+        <button className="btn secondary" onClick={onRetest}>Take the speed test</button>
         {backup}
       </div>
     );
@@ -40,7 +42,10 @@ export function Stats() {
       <div className="tiles">
         <div className="tile"><b>{recentEff ?? '—'}</b><span>effective wpm (last 5)</span></div>
         <div className="tile"><b>{gain === null ? '—' : `${gain > 0 ? '+' : ''}${gain}%`}</b><span>vs. first speed test</span></div>
-        <div className="tile"><b>{baseline ? baseline.wpm : '—'}</b><span>natural speed (latest test)</span></div>
+        <button className="tile tile-btn" onClick={onRetest} title="Measure your natural speed on fresh text">
+          <b>{baseline ? baseline.wpm : '—'}</b>
+          <span>natural speed · {baseline ? 'retest →' : 'take test →'}</span>
+        </button>
         <div className="tile"><b>{words.toLocaleString()}</b><span>words · {minutes(ms)}</span></div>
       </div>
 
@@ -59,11 +64,11 @@ export function Stats() {
         <tbody>
           {[...sessions].reverse().slice(0, 30).map((s, i) => (
             <tr key={i}>
-              <td>{fmtDate(s.at)}{s.baseline ? ' · test' : s.mode === 'focus' ? ' · focus' : ''}</td>
+              <td>{fmtDate(s.at)}{s.baseline ? ' · test' : s.goal === 'skim' ? ' · skim' : s.mode === 'focus' ? ' · focus' : ''}</td>
               <td>{s.words}</td>
               <td>{s.wpm}</td>
               <td>{s.accuracy === undefined ? '—' : `${Math.round(s.accuracy * 100)}%`}</td>
-              <td>{s.accuracy === undefined ? '—' : Math.round(s.wpm * s.accuracy)}</td>
+              <td>{s.accuracy === undefined || s.goal === 'skim' ? '—' : Math.round(s.wpm * s.accuracy)}</td>
             </tr>
           ))}
         </tbody>

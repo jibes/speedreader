@@ -4,16 +4,21 @@ Paste text, paste or share a link, or drop any file (PDF, DOCX, EPUB, ODT, RTF, 
 
 **Links:** Lumen fetches the page directly and extracts the article with Mozilla Readability. Sites that block cross-origin requests (most) fall back to the [r.jina.ai](https://jina.ai/reader) reader service, which receives only the URL.
 
-## How it trains
+## How it works
 
-- **Effective reading rate = WPM × comprehension.** Speed alone is meaningless (Rayner et al., 2016).
-- **Adaptive pacing.** After each section (150/300/600 words), three auto-generated cloze questions; a weighted up/down staircase raises or lowers WPM to hold ~75 % comprehension.
-- **Speed test.** Self-paced read + questions sets your natural baseline and starting pace.
-- **Eye-movement-aware timing.** Per-word durations scale with length, frequency, numbers/acronyms and clause/sentence/paragraph wrap-up; normalised so the displayed WPM is exact.
-- **Two modes.** *Pacer* (highlight over the full page, regressions and preview stay possible — default) and *Focus* (RSVP at the optimal recognition point; rewinds to sentence start after a pause).
-- **Phrase chunking** (1–3 words, never across sentences), gentle ramp-up after pauses.
+Three goals (Settings → Goal):
 
-Deliberately excluded (not supported by evidence): subvocalisation suppression, eye exercises, "whole-page" reading. See the in-app *Science* page for references.
+- **Train** — after each 300-word section, three auto-generated cloze questions; a weighted up/down staircase sets the speed to hold ~75 % comprehension. Score = **effective reading rate (WPM × comprehension)** — speed alone is meaningless (Rayner et al., 2016).
+- **Read** — steady pacer at the speed you set, no checks.
+- **Skim** — for gist (Duggan & Payne, 2009): first sentence of each paragraph and key terms (tf-idf) stay bold and run at your pace; the rest is dimmed and swept at ¼ time. Every 600 words: "which topic came up?" checks.
+
+Also:
+- **Speed test** — self-paced read + questions sets your natural baseline and starting pace; retest from *Progress*.
+- **Eye-movement-aware timing** — per-word durations scale with length, frequency, numbers/acronyms and clause/sentence/paragraph wrap-up; normalised so the displayed WPM is exact.
+- **Pacer over the full page** — continuous scroll, look-backs and preview stay possible.
+- Appearance: text size, serif/sans, auto/light/sepia/dark.
+
+Deliberately excluded (not supported by evidence): RSVP/one-word-at-a-time display, multi-word "span" chunking, subvocalisation suppression, eye exercises, "whole-page" reading. See the in-app *Science* page for references.
 
 ## Install as an app
 
@@ -29,7 +34,7 @@ Lumen is a PWA: use *Install* in the header (Chrome/Edge/Android) or *Share → 
 
 ## Keys
 
-`Space` play/pause · `←/→` sentence · `↑/↓` ±10 wpm (`Shift` ±50) · `M` mode · `Esc` library · `1–4` answer
+`Space` play/pause · `←/→` sentence · `↑/↓` ±10 wpm (`Shift` ±50; not in Train) · `Esc` library · `1–4` answer
 
 ## Develop
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChunks, buildDoc, normaliseText, orpIndex } from '../src/core/text';
+import { buildDoc, normaliseText } from '../src/core/text';
 import { makeQuiz } from '../src/core/quiz';
 import { nextWpm, startFromBaseline } from '../src/core/trainer';
 import { rtf } from '../src/core/extract';
@@ -29,25 +29,6 @@ describe('text', () => {
     expect(long.w).toBeGreaterThan(short.w);
   });
 
-  it('places ORP left of centre', () => {
-    expect(orpIndex('a')).toBe(0);
-    expect(orpIndex('read')).toBe(1);
-    expect(orpIndex('reading')).toBe(2);
-    expect(orpIndex('"Hello,')).toBe(2);
-  });
-
-  it('chunks never cross sentences and cover every token', () => {
-    const d = buildDoc(SAMPLE);
-    const chunks = buildChunks(d, 3);
-    let next = 0;
-    for (const c of chunks) {
-      expect(c.start).toBe(next);
-      expect(c.end - c.start).toBeLessThanOrEqual(3);
-      expect(new Set(d.tokens.slice(c.start, c.end).map((t) => t.s)).size).toBe(1);
-      next = c.end;
-    }
-    expect(next).toBe(d.tokens.length);
-  });
 });
 
 describe('quiz', () => {

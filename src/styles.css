@@ -155,23 +155,12 @@ h2 { font-size: 15px; font-weight: 600; margin: 40px 0 12px; color: var(--ink-2)
 .pacer .w.read { color: var(--ink-3); }
 .pacer .w.cur { background: var(--hl); color: var(--ink); box-shadow: 0 0 0 2px var(--hl); }
 .pacer.playing .w:not(.read):not(.cur) { color: var(--ink-2); }
+/* skim: key sentences/terms stay prominent, the rest recedes */
+.pacer .w.dim:not(.cur) { color: var(--ink-3); opacity: .55; }
+.pacer .w.key:not(.read) { font-weight: 600; }
+.auto-speed { flex: 1; font-size: 13px; color: var(--ink-3); text-align: right; }
 .pacer .w { cursor: pointer; }
 
-.focus { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 0 16px; gap: 48px; user-select: none; }
-.rsvp { position: relative; width: 100%; max-width: 760px; height: 2.4em; }
-.rsvp::before, .rsvp::after {
-  content: ''; position: absolute; left: 38%; width: 2px; height: 10px; background: var(--ink-3); opacity: .5;
-}
-.rsvp::before { top: -16px; }
-.rsvp::after { bottom: -16px; }
-.rsvp-word { position: absolute; left: 38%; top: 50%; white-space: pre; transform: translateY(-50%); line-height: 1; }
-.rsvp-word .l { position: absolute; right: 100%; }
-.rsvp-word .o { color: var(--accent); }
-.rsvp-word .pv { position: absolute; left: 100%; }
-.context { max-width: 640px; text-align: center; color: var(--ink-3); font-size: 15px; line-height: 1.6; min-height: 3.2em; }
-.context .cur { color: var(--ink); }
-
-.tap { position: absolute; inset: 0; background: none; border: 0; }
 .hint-play { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); white-space: nowrap; color: var(--ink-3); font-size: 13px; pointer-events: none; background: var(--bg); padding: 6px 12px; border-radius: 999px; box-shadow: 0 0 0 1px var(--line); }
 @media (hover: none) { .hint-play { display: none; } }
 kbd { font: 12px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; }
@@ -210,6 +199,8 @@ input[type='range'] { accent-color: var(--accent); flex: 1; }
 .row:first-of-type { border-top: 0; }
 .row label { font-size: 15px; }
 .row small { display: block; color: var(--ink-3); font-size: 12.5px; }
+.goal-row { flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 4px; }
+.sheet-h { margin-top: 20px !important; }
 .seg { display: inline-flex; background: var(--bg); border-radius: 999px; padding: 3px; gap: 2px; }
 .seg button { border: 0; background: none; padding: 6px 12px; border-radius: 999px; font-size: 13.5px; color: var(--ink-2); }
 .seg button[aria-pressed='true'] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
@@ -236,6 +227,7 @@ input[type='range'] { accent-color: var(--accent); flex: 1; }
 .big { font: 600 56px/1 var(--sans); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
 .big small { font-size: 18px; color: var(--ink-3); font-weight: 400; letter-spacing: 0; margin-left: 4px; }
 .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 24px 0; }
+.kv.kv-2 { grid-template-columns: 1fr 1fr; }
 .kv div { background: var(--bg); border-radius: 12px; padding: 12px 8px; }
 .kv b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
 .kv span { font-size: 12px; color: var(--ink-3); }
@@ -250,6 +242,8 @@ input[type='range'] { accent-color: var(--accent); flex: 1; }
 .tile { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; box-shadow: 0 0 0 1px var(--line); }
 .tile b { display: block; font-size: 28px; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; font-weight: 600; }
 .tile span { color: var(--ink-3); font-size: 13px; }
+.tile-btn { border: 0; text-align: left; font: inherit; color: inherit; }
+.tile-btn:hover span { color: var(--accent); }
 .chart { background: var(--surface); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); padding: 16px 12px 8px; position: relative; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart .grid { stroke: var(--line); stroke-width: 1; }
@@ -294,7 +288,6 @@ table.sessions { width: 100%; border-collapse: collapse; font-size: 14px; font-v
   .dock { padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom)); gap: 10px; }
   .play { width: 44px; height: 44px; }
   .play svg { width: 18px; height: 18px; }
-  .focus { gap: 20px; }
   .sheet { padding: 18px 20px; border-radius: 16px; }
   .sheet .sub { margin-bottom: 12px; }
   .row { padding: 8px 0; }
