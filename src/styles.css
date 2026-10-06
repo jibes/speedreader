@@ -145,7 +145,8 @@ h2 { font-size: 15px; font-weight: 600; margin: 40px 0 12px; color: var(--ink-2)
 .r-progress > span { display: block; height: 100%; background: var(--accent); transition: width .2s linear; }
 
 .pacer {
-  width: 100%; max-width: 680px; padding: 24px 24px 40vh; padding-bottom: 40dvh; overflow-y: auto; scroll-behavior: smooth;
+  position: relative; overflow-anchor: none;
+  width: 100%; max-width: 680px; padding: 24px 24px 40vh; padding-bottom: 40dvh; overflow-y: auto;
   scrollbar-width: none;
 }
 .pacer::-webkit-scrollbar { display: none; }
