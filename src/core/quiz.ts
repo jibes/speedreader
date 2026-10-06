@@ -8,7 +8,9 @@ import type { Doc } from './text';
 import { isCommon } from './words';
 
 export interface Question {
-  /** sentence with the target replaced by ____ */
+  /** cloze: fill the blank in a sentence; gist: which topic came up (skimming) */
+  kind?: 'cloze' | 'gist';
+  /** cloze: sentence with the target replaced by _____ */
   prompt: string;
   options: string[];
   answer: number;

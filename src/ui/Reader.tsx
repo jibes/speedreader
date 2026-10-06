@@ -1,18 +1,16 @@
 import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { makeQuiz, type Question } from '../core/quiz';
-import { store, type DocMeta, type Settings } from '../core/store';
-import { buildChunks, buildDoc, orpIndex, type Chunk, type Doc } from '../core/text';
+import { gistQuiz, planSkim, SKIM_PACE } from '../core/skim';
+import { SECTION_WORDS, SKIM_SECTION_WORDS, store, type DocMeta, type Settings } from '../core/store';
+import { buildDoc, type Doc } from '../core/text';
 import { clampWpm, nextWpm, startFromBaseline } from '../core/trainer';
-import { Back, Close, Fwd, Gauge, Pause, Play, Sliders } from './icons';
+import { Back, Close, Pause, Play, Sliders } from './icons';
 import { Quiz, Result, type ResultInfo } from './Quiz';
 import { SettingsSheet } from './Settings';
 import { useWakeLock } from './useWakeLock';
 
-type Sheet =
-  | { kind: 'settings' }
-  | { kind: 'quiz'; questions: Question[]; from: number; to: number; ms: number; baseline?: boolean }
-  | { kind: 'result'; info: ResultInfo; after?: number }
-  | { kind: 'end' };
+type QuizSheet = { kind: 'quiz'; questions: Question[]; from: number; to: number; ms: number; baseline?: boolean; skim?: boolean };
+type Sheet = { kind: 'settings' } | QuizSheet | { kind: 'result'; info: ResultInfo } | { kind: 'end' };
 
 interface Baseline {
   from: number;
@@ -20,17 +18,10 @@ interface Baseline {
   started: number | null;
 }
 
-const RAMP = 6;
-
-function findChunk(chunks: Chunk[], pos: number) {
-  let lo = 0;
-  let hi = chunks.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (chunks[mid].start <= pos) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo;
+/** the word being shown: [start, end) */
+interface Cur {
+  start: number;
+  end: number;
 }
 
 export function Reader({
@@ -55,10 +46,11 @@ export function Reader({
   // screen stays on for the whole reading session, including quizzes and pauses
   useWakeLock(true);
 
+  const { goal } = settings;
+  const checks = goal !== 'read';
+
   const seg = useRef({ start: meta.pos, ms: 0 });
   const playStart = useRef(0);
-  const ramp = useRef(RAMP);
-  const pausedAt = useRef(0);
   const lastSave = useRef(0);
   const baselineRef = useRef<Baseline | null>(null);
   baselineRef.current = baseline;
@@ -78,9 +70,10 @@ export function Reader({
     };
   }, [meta.id, meta.pos]);
 
-  const chunks = useMemo(() => (doc ? buildChunks(doc, settings.chunk) : []), [doc, settings.chunk]);
-  const ci = useMemo(() => (chunks.length ? findChunk(chunks, pos) : 0), [chunks, pos]);
-  const cur = chunks[ci];
+  const skim = useMemo(() => (doc && goal === 'skim' ? planSkim(doc) : null), [doc, goal]);
+  // skim checks need text outside the section for wrong answers: ≥ 3 sections per document
+  const section = goal === 'skim' ? Math.max(200, Math.min(SKIM_SECTION_WORDS, Math.round((doc?.tokens.length ?? 0) / 3))) : SECTION_WORDS;
+  const cur: Cur = useMemo(() => ({ start: pos, end: pos + 1 }), [pos]);
 
   // latest values for callbacks fired from timers / unmount
   const live = useRef({ pos, settings, doc, playing });
@@ -93,7 +86,10 @@ export function Reader({
     const words = end - seg.current.start;
     const ms = segMs();
     if (words >= 30 && ms > 3000) {
-      store.addSession({ at: Date.now(), docId: meta.id, mode: live.current.settings.mode, wpm: live.current.settings.wpm, words, ms });
+      const s = live.current.settings;
+      // skim speed is coverage (words swept per minute); read/train use the set pace
+      const wpm = s.goal === 'skim' ? Math.round(words / (ms / 60000)) : s.wpm;
+      store.addSession({ at: Date.now(), docId: meta.id, goal: s.goal, wpm, words, ms });
     }
     seg.current = { start: end, ms: 0 };
   }, [meta.id]);
@@ -117,27 +113,27 @@ export function Reader({
     [],
   );
 
+  // switching goal starts a fresh section
+  useEffect(() => {
+    seg.current = { start: live.current.pos, ms: 0 };
+    if (live.current.playing) playStart.current = performance.now();
+  }, [goal]);
+
   /* ── transport ──────────────────────────────────── */
   const pause = useCallback(() => {
     if (!live.current.playing) return;
     seg.current.ms += performance.now() - playStart.current;
-    pausedAt.current = performance.now();
     setPlaying(false);
-    if (!live.current.settings.training) logUntested(live.current.pos);
+    if (live.current.settings.goal === 'read') logUntested(live.current.pos);
   }, [logUntested]);
 
   const play = useCallback(() => {
-    const { doc: d, settings: s, pos: p } = live.current;
+    const { doc: d, pos: p } = live.current;
     if (!d || live.current.playing) return;
     if (p >= d.tokens.length - 1) {
       setPos(0);
       seg.current = { start: 0, ms: 0 };
-    } else if (s.mode === 'focus' && pausedAt.current && performance.now() - pausedAt.current > 2000) {
-      // RSVP removes the option to look back: re-enter at the sentence start
-      const ss = d.sentenceStarts[d.tokens[p].s];
-      if (ss < p) setPos(ss);
     }
-    ramp.current = s.rampUp ? 0 : RAMP;
     playStart.current = performance.now();
     setPlaying(true);
   }, []);
@@ -150,10 +146,8 @@ export function Reader({
     const np = Math.max(0, Math.min(d.tokens.length - 1, p));
     // jumping forward past unread text invalidates the current section
     if (np > live.current.pos + 2) {
-      if (live.current.playing) {
-        seg.current.ms = 0;
-        playStart.current = performance.now();
-      } else seg.current.ms = 0;
+      seg.current.ms = 0;
+      if (live.current.playing) playStart.current = performance.now();
       seg.current.start = np;
     }
     if (np < seg.current.start) seg.current.start = np;
@@ -171,52 +165,48 @@ export function Reader({
   /* ── checkpoint / quiz ──────────────────────────── */
   const checkpoint = useCallback((end: number) => {
     const d = live.current.doc!;
-    const questions = makeQuiz(d, seg.current.start, end, 3);
+    const from = seg.current.start;
+    const isSkim = live.current.settings.goal === 'skim';
+    const questions = isSkim ? gistQuiz(d, planSkim(d), from, end, 3) : makeQuiz(d, from, end, 3);
     if (questions.length >= 2) {
-      setSheet({ kind: 'quiz', questions, from: seg.current.start, to: end, ms: seg.current.ms });
+      setSheet({ kind: 'quiz', questions, from, to: end, ms: seg.current.ms, skim: isSkim });
     } else {
       logUntested(end);
-      playStart.current = performance.now();
-      setPlaying(true);
+      if (end >= d.tokens.length) setSheet({ kind: 'end' });
+      else {
+        playStart.current = performance.now();
+        setPlaying(true);
+      }
     }
   }, [logUntested]);
 
   /* ── the clock ──────────────────────────────────── */
   useEffect(() => {
-    if (!playing || !doc || !cur || sheet) return;
-    let ms = (cur.w * 60000) / settings.wpm;
-    if (ramp.current < RAMP) {
-      ms *= 1 + 0.6 * (1 - ramp.current / RAMP);
-      ramp.current++;
-    }
+    if (!playing || !doc || sheet) return;
+    const tok = doc.tokens[pos];
+    const ms = (tok.w * (skim && !skim.key[pos] ? SKIM_PACE : 1) * 60000) / settings.wpm;
     const t = setTimeout(() => {
-      const next = chunks[ci + 1];
-      const last = doc.tokens[cur.end - 1];
-      if (!next) {
+      const next = pos + 1;
+      if (next >= doc.tokens.length) {
         pause();
-        if (settings.training && cur.end - seg.current.start >= 60) checkpoint(cur.end);
+        if (checks && next - seg.current.start >= 60) checkpoint(next);
         else {
-          logUntested(cur.end);
+          logUntested(next);
           setSheet({ kind: 'end' });
         }
-        setPos(doc.tokens.length - 1);
         return;
       }
-      setPos(next.start);
-      if (
-        settings.training &&
-        cur.end - seg.current.start >= settings.segment &&
-        (last.end === 'sentence' || last.end === 'paragraph')
-      ) {
+      setPos(next);
+      if (checks && next - seg.current.start >= section && (tok.end === 'sentence' || tok.end === 'paragraph')) {
         seg.current.ms += performance.now() - playStart.current;
         setPlaying(false);
-        checkpoint(cur.end);
+        checkpoint(next);
       }
     }, ms);
     return () => clearTimeout(t);
-  }, [playing, doc, cur, ci, chunks, sheet, settings.wpm, settings.training, settings.segment, pause, checkpoint, logUntested]);
+  }, [playing, doc, pos, sheet, skim, settings.wpm, checks, section, pause, checkpoint, logUntested]);
 
-  function quizDone(q: Extract<Sheet, { kind: 'quiz' }>, correct: number) {
+  function quizDone(q: QuizSheet, correct: number) {
     const accuracy = correct / q.questions.length;
     const words = q.to - q.from;
     if (q.baseline) {
@@ -224,7 +214,7 @@ export function Reader({
       // > 1500 wpm on a self-paced read is skimming or a mis-click — don't record it
       const invalid = wpm > 1500;
       const next = invalid ? settings.wpm : startFromBaseline(wpm, accuracy);
-      if (!invalid) store.addSession({ at: Date.now(), docId: meta.id, mode: 'pacer', wpm, words, ms: q.ms, accuracy, baseline: true });
+      if (!invalid) store.addSession({ at: Date.now(), docId: meta.id, goal: 'train', wpm, words, ms: q.ms, accuracy, baseline: true });
       setSettings({ wpm: next });
       setBaseline(null);
       seg.current = { start: q.to, ms: 0 };
@@ -232,11 +222,17 @@ export function Reader({
       setSheet({ kind: 'result', info: { wpm, accuracy, nextWpm: invalid ? undefined : next, baseline: true, invalid } });
       return;
     }
+    seg.current = { start: q.to, ms: 0 };
+    if (q.skim) {
+      const wpm = Math.round(words / (q.ms / 60000));
+      store.addSession({ at: Date.now(), docId: meta.id, goal: 'skim', wpm, words, ms: q.ms, accuracy });
+      setSheet({ kind: 'result', info: { wpm, accuracy, skim: true } });
+      return;
+    }
     const wpm = settings.wpm;
-    store.addSession({ at: Date.now(), docId: meta.id, mode: settings.mode, wpm, words, ms: q.ms, accuracy });
+    store.addSession({ at: Date.now(), docId: meta.id, goal: 'train', wpm, words, ms: q.ms, accuracy });
     const next = nextWpm(wpm, accuracy);
     setSettings({ wpm: next });
-    seg.current = { start: q.to, ms: 0 };
     setSheet({ kind: 'result', info: { wpm, accuracy, nextWpm: next } });
   }
 
@@ -265,7 +261,7 @@ export function Reader({
     if (!doc || !baseline?.started) return;
     const ms = performance.now() - baseline.started;
     const questions = makeQuiz(doc, baseline.from, baseline.to, 3);
-    const q = { kind: 'quiz' as const, questions, from: baseline.from, to: baseline.to, ms, baseline: true };
+    const q: QuizSheet = { kind: 'quiz', questions, from: baseline.from, to: baseline.to, ms, baseline: true };
     if (questions.length >= 2) setSheet(q);
     else quizDone({ ...q, questions: [{ prompt: '', options: [], answer: 0 }] }, 1);
   }
@@ -297,15 +293,10 @@ export function Reader({
           sentenceJump(1);
           break;
         case 'ArrowUp':
-          e.preventDefault();
-          setSettings({ wpm: clampWpm(settings.wpm + step) });
-          break;
         case 'ArrowDown':
           e.preventDefault();
-          setSettings({ wpm: clampWpm(settings.wpm - step) });
-          break;
-        case 'm':
-          setSettings({ mode: settings.mode === 'pacer' ? 'focus' : 'pacer' });
+          // in training the staircase owns the speed
+          if (goal !== 'train') setSettings({ wpm: clampWpm(settings.wpm + (e.key === 'ArrowUp' ? step : -step)) });
           break;
         case 'Escape':
           onExit();
@@ -334,7 +325,7 @@ export function Reader({
 
   const total = doc.tokens.length;
   const progress = total > 1 ? pos / (total - 1) : 0;
-  const minsLeft = Math.max(0, Math.round((total - pos) / settings.wpm));
+  const minsLeft = Math.max(0, Math.round(((total - pos) * (goal === 'skim' ? 0.45 : 1)) / settings.wpm));
   const font = settings.serif ? 'var(--serif)' : 'var(--sans)';
 
   return (
@@ -342,7 +333,6 @@ export function Reader({
       <div className="r-top">
         <button className="icon" aria-label="Back to library" onClick={onExit}><Close /></button>
         <div className="r-title">{meta.title}</div>
-        <button className="icon" aria-label="Speed test" title="Speed test" onClick={startBaseline}><Gauge /></button>
         <button className="icon" aria-label="Settings" onClick={() => { pause(); setSheet({ kind: 'settings' }); }}><Sliders /></button>
       </div>
       <div className="r-progress"><span style={{ width: `${progress * 100}%` }} /></div>
@@ -350,30 +340,33 @@ export function Reader({
       <div className="r-stage">
         {baseline ? (
           <BaselineView doc={doc} b={baseline} font={font} size={settings.fontSize} onStart={() => setBaseline({ ...baseline, started: performance.now() })} onDone={finishBaseline} onCancel={() => setBaseline(null)} />
-        ) : settings.mode === 'pacer' ? (
-          <PacerView doc={doc} cur={cur} playing={playing} font={font} size={settings.fontSize} onSeek={seek} onToggle={toggle} />
         ) : (
-          <FocusView doc={doc} cur={cur} playing={playing} font={font} size={settings.fontSize} onToggle={toggle} />
+          <PacerView doc={doc} cur={cur} playing={playing} font={font} size={settings.fontSize} keyMask={skim?.key} onSeek={seek} onToggle={toggle} />
         )}
         {!playing && !baseline && !sheet && pos === meta.pos && (
-          <div className="hint-play"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> sentence · <kbd>↑</kbd><kbd>↓</kbd> speed</div>
+          <div className="hint-play">
+            <kbd>Space</kbd> play · <kbd>←</kbd> back{goal !== 'train' && <> · <kbd>↑</kbd><kbd>↓</kbd> speed</>}
+          </div>
         )}
       </div>
 
       {!baseline && (
         <div className="dock">
           <span className="meta">{Math.round(progress * 100)} % · {minsLeft} min left</span>
-          <button className="icon" aria-label="Previous sentence" onClick={() => sentenceJump(-1)}><Back /></button>
+          <button className="icon" aria-label="Back one sentence" onClick={() => sentenceJump(-1)}><Back /></button>
           <button className="icon play" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle}>{playing ? <Pause /> : <Play />}</button>
-          <button className="icon" aria-label="Next sentence" onClick={() => sentenceJump(1)}><Fwd /></button>
           <div className="speed">
-            <input type="range" min={100} max={1200} step={10} value={settings.wpm} aria-label="Words per minute" onChange={(e) => setSettings({ wpm: +e.target.value })} />
+            {goal === 'train' ? (
+              <span className="auto-speed" title="Training adjusts the speed from your answers">Adaptive</span>
+            ) : (
+              <input type="range" min={100} max={1200} step={10} value={settings.wpm} aria-label="Words per minute" onChange={(e) => setSettings({ wpm: +e.target.value })} />
+            )}
             <output>{settings.wpm} <small>wpm</small></output>
           </div>
         </div>
       )}
 
-      {sheet?.kind === 'settings' && <SettingsSheet s={settings} set={setSettings} onClose={() => setSheet(null)} onBaseline={startBaseline} />}
+      {sheet?.kind === 'settings' && <SettingsSheet s={settings} set={setSettings} onClose={() => setSheet(null)} />}
       {sheet?.kind === 'quiz' && <Quiz key={sheet.from} questions={sheet.questions} onDone={(c) => quizDone(sheet, c)} />}
       {sheet?.kind === 'result' && (
         <Result
@@ -390,7 +383,7 @@ export function Reader({
         <div className="scrim">
           <div className="sheet result">
             <h3>Finished</h3>
-            <p className="sub">{total.toLocaleString()} words read.</p>
+            <p className="sub">{total.toLocaleString()} words.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
               <button className="btn secondary" onClick={() => { setSheet(null); seek(0); }}>Read again</button>
               <button className="btn" autoFocus onClick={onExit}>Library</button>
@@ -456,6 +449,7 @@ const Para = memo(function Para({
   end,
   curStart,
   curEnd,
+  keyMask,
   onWord,
 }: {
   doc: Doc;
@@ -463,17 +457,20 @@ const Para = memo(function Para({
   end: number;
   curStart: number;
   curEnd: number;
+  /** skim: 1 = key word, others are dimmed */
+  keyMask?: Uint8Array;
   onWord: (i: number) => void;
 }) {
   const words: ReactElement[] = [];
   for (let i = start; i < end; i++) {
-    const cls = i < curStart ? 'w read' : i < curEnd ? 'w cur' : 'w';
+    let cls = i < curStart ? 'w read' : i < curEnd ? 'w cur' : 'w';
+    if (keyMask) cls += keyMask[i] ? ' key' : ' dim';
     words.push(<span key={i} data-i={i} className={cls}>{doc.tokens[i].text}</span>, <span key={'s' + i}> </span>);
   }
   return <p onClick={(e) => { const i = (e.target as HTMLElement).dataset.i; if (i) onWord(+i); }}>{words}</p>;
 });
 
-function PacerView({ doc, cur, playing, font, size, onSeek, onToggle }: { doc: Doc; cur: Chunk; playing: boolean; font: string; size: number; onSeek: (i: number) => void; onToggle: () => void }) {
+function PacerView({ doc, cur, playing, font, size, keyMask, onSeek, onToggle }: { doc: Doc; cur: Cur; playing: boolean; font: string; size: number; keyMask?: Uint8Array; onSeek: (i: number) => void; onToggle: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [win, setWin] = useState(() => windowAround(doc, cur.start));
   const anchor = useRef<{ i: number; top: number; start: number } | null>(null);
@@ -582,37 +579,11 @@ function PacerView({ doc, cur, playing, font, size, onSeek, onToggle }: { doc: D
             end={p.end}
             curStart={before ? Infinity : after ? -1 : cur.start}
             curEnd={before ? Infinity : after ? -1 : cur.end}
+            keyMask={keyMask}
             onWord={onSeek}
           />
         );
       })}
-    </div>
-  );
-}
-
-function FocusView({ doc, cur, playing, font, size, onToggle }: { doc: Doc; cur: Chunk; playing: boolean; font: string; size: number; onToggle: () => void }) {
-  const text = doc.tokens.slice(cur.start, cur.end).map((t) => t.text).join(' ');
-  const single = cur.end - cur.start === 1;
-  const pivot = single ? orpIndex(text) : Math.floor(text.length * 0.4);
-  const s = doc.tokens[cur.start].s;
-  const sStart = doc.sentenceStarts[s];
-  const sEnd = doc.sentenceStarts[s + 1] ?? doc.tokens.length;
-  return (
-    <div className="focus" style={{ fontFamily: font }}>
-      <button className="tap" aria-label={playing ? 'Pause' : 'Play'} onClick={onToggle} />
-      <div className="rsvp" style={{ fontSize: Math.round(size * 1.6) }} aria-live="off">
-        <span className="rsvp-word" style={{ marginLeft: '-0.28em' }}>
-          <span className="l">{text.slice(0, pivot)}</span>
-          <span className={single ? 'o' : ''}>{text[pivot]}</span>
-          <span className="pv">{text.slice(pivot + 1)}</span>
-        </span>
-      </div>
-      <div className="context" style={{ visibility: playing ? 'hidden' : 'visible' }}>
-        {doc.tokens.slice(sStart, sEnd).map((t, k) => {
-          const i = sStart + k;
-          return <span key={i} className={i >= cur.start && i < cur.end ? 'cur' : ''}>{t.text} </span>;
-        })}
-      </div>
     </div>
   );
 }

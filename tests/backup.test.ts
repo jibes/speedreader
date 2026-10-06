@@ -53,3 +53,12 @@ describe('backup', () => {
     expect(() => parseBackup(JSON.stringify({ format: 'lumen-backup', version: 99, docs: [], sessions: [] }))).toThrow('newer version');
   });
 });
+
+describe('settings migration', () => {
+  it('maps the old training toggle to a goal and drops removed settings', () => {
+    localStorage.setItem('speedreader:settings', JSON.stringify({ mode: 'focus', chunk: 3, training: false, rampUp: true, wpm: 420, theme: 'sepia' }));
+    expect(store.settings()).toEqual({ goal: 'read', wpm: 420, fontSize: 22, serif: true, theme: 'sepia' });
+    localStorage.setItem('speedreader:settings', JSON.stringify({ training: true }));
+    expect(store.settings().goal).toBe('train');
+  });
+});

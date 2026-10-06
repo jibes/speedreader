@@ -15,7 +15,10 @@ export interface DocMeta {
 export interface Session {
   at: number;
   docId: string;
-  mode: Mode;
+  /** what the session was for; legacy sessions only carry `mode` */
+  goal?: Goal;
+  /** legacy: 'focus' sessions came from the removed RSVP mode */
+  mode?: 'pacer' | 'focus';
   wpm: number;
   words: number;
   ms: number;
@@ -24,43 +27,33 @@ export interface Session {
   baseline?: boolean;
 }
 
-export type Mode = 'pacer' | 'focus';
+/** read: plain pacing · train: adaptive speed with comprehension checks · skim: gist sampling */
+export type Goal = 'read' | 'train' | 'skim';
 
 export interface Settings {
-  mode: Mode;
+  goal: Goal;
   wpm: number;
-  chunk: number;
-  training: boolean;
-  segment: number;
   fontSize: number;
   serif: boolean;
   theme: 'auto' | 'light' | 'sepia' | 'dark';
-  rampUp: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  mode: 'pacer',
+  goal: 'train',
   wpm: 300,
-  chunk: 1,
-  training: true,
-  segment: 300,
   fontSize: 22,
   serif: true,
   theme: 'auto',
-  rampUp: true,
 };
+
+/** training section length in words */
+export const SECTION_WORDS = 300;
+/** skim section length in words (more text per check — gist needs breadth) */
+export const SKIM_SECTION_WORDS = 600;
 
 const texts = createStore('speedreader', 'texts');
 const LS = 'speedreader:';
 
-function lsGet<T>(k: string, d: T): T {
-  try {
-    const v = localStorage.getItem(LS + k);
-    return v ? { ...d, ...JSON.parse(v) } : d;
-  } catch {
-    return d;
-  }
-}
 function lsArr<T>(k: string): T[] {
   try {
     return JSON.parse(localStorage.getItem(LS + k) || '[]');
@@ -77,7 +70,18 @@ function lsSet(k: string, v: unknown) {
 }
 
 export const store = {
-  settings: () => lsGet('settings', DEFAULT_SETTINGS),
+  settings(): Settings {
+    let stored: Partial<Settings> & { training?: boolean } = {};
+    try {
+      stored = JSON.parse(localStorage.getItem(LS + 'settings') || '{}');
+    } catch {
+      /* default */
+    }
+    // migrate pre-goal settings (training on/off)
+    const goal = stored.goal ?? (stored.training === false ? 'read' : 'train');
+    const s = { ...DEFAULT_SETTINGS, ...stored, goal };
+    return { goal: s.goal, wpm: s.wpm, fontSize: s.fontSize, serif: s.serif, theme: s.theme };
+  },
   saveSettings: (s: Settings) => lsSet('settings', s),
   library: () => lsArr<DocMeta>('library').sort((a, b) => b.opened - a.opened),
   saveMeta(m: DocMeta) {
