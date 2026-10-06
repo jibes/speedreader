@@ -8,6 +8,8 @@ export interface DocMeta {
   pos: number;
   added: number;
   opened: number;
+  /** origin URL for fetched articles */
+  source?: string;
 }
 
 export interface Session {
@@ -83,10 +85,10 @@ export const store = {
     lib.push(m);
     lsSet('library', lib);
   },
-  async addDoc(title: string, text: string, words: number): Promise<DocMeta> {
+  async addDoc(title: string, text: string, words: number, source?: string): Promise<DocMeta> {
     const id = crypto.randomUUID?.() ?? String(Date.now() + Math.random());
     const now = Date.now();
-    const meta: DocMeta = { id, title, words, pos: 0, added: now, opened: now };
+    const meta: DocMeta = { id, title, words, pos: 0, added: now, opened: now, source };
     await set(id, text, texts);
     store.saveMeta(meta);
     return meta;

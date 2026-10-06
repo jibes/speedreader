@@ -1,6 +1,8 @@
 # Lumen — evidence-based speed reading trainer
 
-Paste text or drop any file (PDF, DOCX, EPUB, ODT, RTF, HTML, Markdown, TXT, subtitles, images via OCR) and train reading speed **without losing comprehension**. Everything runs locally in the browser; nothing is uploaded.
+Paste text, paste or share a link, or drop any file (PDF, DOCX, EPUB, ODT, RTF, HTML, Markdown, TXT, subtitles, images via OCR) and train reading speed **without losing comprehension**. Everything runs locally in the browser; nothing is uploaded.
+
+**Links:** Lumen fetches the page directly and extracts the article with Mozilla Readability. Sites that block cross-origin requests (most) fall back to the [r.jina.ai](https://jina.ai/reader) reader service, which receives only the URL.
 
 ## How it trains
 
@@ -18,7 +20,7 @@ Deliberately excluded (not supported by evidence): subvocalisation suppression, 
 Lumen is a PWA: use *Install* in the header (Chrome/Edge/Android) or *Share → Add to Home Screen* (iOS Safari). Once installed:
 
 - works offline (OCR engine is cached after first use)
-- appears in the system share sheet — share text or a link into Lumen (Android, desktop Chrome)
+- appears in the system share sheet — share text, or share a link and Lumen fetches the article (Android, desktop Chrome)
 - *Open with → Lumen* for PDF, EPUB, DOCX, ODT, RTF, TXT, MD, HTML (desktop Chromium)
 
 ## Keys
