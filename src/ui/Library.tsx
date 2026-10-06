@@ -6,7 +6,14 @@ import { normaliseText, wordCount } from '../core/text';
 
 const ACCEPT = '.txt,.md,.markdown,.pdf,.docx,.epub,.odt,.rtf,.html,.htm,.xhtml,.srt,.vtt,.csv,.json,.xml,image/*,text/*';
 
-export function Library({ onOpen }: { onOpen: (d: DocMeta, opts?: { baseline?: boolean }) => void }) {
+export function Library({
+  onOpen,
+  incoming,
+}: {
+  onOpen: (d: DocMeta, opts?: { baseline?: boolean }) => void;
+  /** text shared into the app or files opened with it (PWA share target / file handler) */
+  incoming?: { text?: string; files?: File[] };
+}) {
   const [docs, setDocs] = useState<DocMeta[]>(() => store.library());
   const [text, setText] = useState('');
   const [status, setStatus] = useState<{ msg: string; err?: boolean } | null>(null);
@@ -17,6 +24,12 @@ export function Library({ onOpen }: { onOpen: (d: DocMeta, opts?: { baseline?: b
   useEffect(() => {
     store.gc();
   }, []);
+
+  useEffect(() => {
+    if (incoming?.text) setText(incoming.text);
+    if (incoming?.files?.length) handleFiles(incoming.files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incoming]);
 
   async function add(title: string, raw: string, opts?: { baseline?: boolean }) {
     const clean = normaliseText(raw);

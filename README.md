@@ -13,6 +13,14 @@ Paste text or drop any file (PDF, DOCX, EPUB, ODT, RTF, HTML, Markdown, TXT, sub
 
 Deliberately excluded (not supported by evidence): subvocalisation suppression, eye exercises, "whole-page" reading. See the in-app *Science* page for references.
 
+## Install as an app
+
+Lumen is a PWA: use *Install* in the header (Chrome/Edge/Android) or *Share → Add to Home Screen* (iOS Safari). Once installed:
+
+- works offline (OCR engine is cached after first use)
+- appears in the system share sheet — share text or a link into Lumen (Android, desktop Chrome)
+- *Open with → Lumen* for PDF, EPUB, DOCX, ODT, RTF, TXT, MD, HTML (desktop Chromium)
+
 ## Keys
 
 `Space` play/pause · `←/→` sentence · `↑/↓` ±10 wpm (`Shift` ±50) · `M` mode · `Esc` library · `1–4` answer
