@@ -41,7 +41,7 @@ export function htmlToText(html: string): string {
   return out.join('\n\n');
 }
 
-function markdown(md: string): string {
+export function markdown(md: string): string {
   return md
     .replace(/```[\s\S]*?```/g, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
