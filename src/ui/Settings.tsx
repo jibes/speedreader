@@ -1,3 +1,4 @@
+import type { AiState } from '../core/ai';
 import type { Settings } from '../core/store';
 import { t } from '../i18n';
 
@@ -5,7 +6,12 @@ type Props = {
   s: Settings;
   set: (p: Partial<Settings>) => void;
   onClose: () => void;
+  ai?: { state: AiState; progress: number; enable: () => void };
 };
+
+function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return <button className="switch" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} />;
+}
 
 export function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
@@ -17,7 +23,7 @@ export function Seg<T extends string | number>({ value, options, onChange }: { v
   );
 }
 
-export function SettingsSheet({ s, set, onClose }: Props) {
+export function SettingsSheet({ s, set, onClose, ai }: Props) {
   return (
     <div className="scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet" role="dialog" aria-label={t('reader.textSettings')}>
@@ -34,6 +40,16 @@ export function SettingsSheet({ s, set, onClose }: Props) {
           <label>{t('text.theme')}</label>
           <Seg value={s.theme} options={[['auto', t('theme.auto')], ['light', t('theme.light')], ['sepia', t('theme.sepia')], ['dark', t('theme.dark')]]} onChange={(theme) => set({ theme })} />
         </div>
+        {ai && (
+          <div className="row">
+            <label>
+              {t('ai.title')}
+              <small>{ai.state === 'downloading' ? t('ai.downloading', { p: Math.round(ai.progress * 100) }) : t(`ai.${ai.state}`)}</small>
+            </label>
+            {ai.state === 'available' && <Switch on={s.ai} label={t('ai.title')} onChange={(v) => set({ ai: v })} />}
+            {ai.state === 'downloadable' && <button className="btn secondary" onClick={ai.enable}>{t('ai.enable')}</button>}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
           <button className="btn" onClick={onClose}>{t('common.done')}</button>
         </div>
