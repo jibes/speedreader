@@ -6,6 +6,7 @@ import { clampWpm, nextWpm, startFromBaseline } from '../core/trainer';
 import { Back, Close, Fwd, Gauge, Pause, Play, Sliders } from './icons';
 import { Quiz, Result, type ResultInfo } from './Quiz';
 import { SettingsSheet } from './Settings';
+import { useWakeLock } from './useWakeLock';
 
 type Sheet =
   | { kind: 'settings' }
@@ -65,6 +66,8 @@ export function Reader({
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [baseline, setBaseline] = useState<Baseline | null>(null);
   const [, tick] = useState(0);
+  // screen stays on for the whole reading session, including quizzes and pauses
+  useWakeLock(true);
 
   const seg = useRef({ start: meta.pos, ms: 0 });
   const playStart = useRef(0);
