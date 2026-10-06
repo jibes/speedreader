@@ -19,7 +19,7 @@ Deliberately excluded (not supported by evidence): subvocalisation suppression, 
 
 Lumen is a PWA: use *Install* in the header (Chrome/Edge/Android) or *Share → Add to Home Screen* (iOS Safari). Once installed:
 
-- works offline (OCR engine is cached after first use)
+- works offline, including OCR: the engine (~8 MB, only the variant your device uses) downloads in the background after the first visit; skipped on Data Saver / 2G
 - appears in the system share sheet — share text, or share a link and Lumen fetches the article (Android, desktop Chrome)
 - *Open with → Lumen* for PDF, EPUB, DOCX, ODT, RTF, TXT, MD, HTML (desktop Chromium)
 
