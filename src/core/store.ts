@@ -39,6 +39,8 @@ export interface Settings {
   theme: 'auto' | 'light' | 'sepia' | 'dark';
   /** UI language; 'auto' follows the browser/OS */
   lang: LangPref;
+  /** use on-device AI questions when the browser offers them */
+  ai: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   serif: true,
   theme: 'auto',
   lang: 'auto',
+  ai: true,
 };
 
 /** training section length in words */
@@ -84,7 +87,7 @@ export const store = {
     // migrate pre-goal settings (training on/off)
     const goal = stored.goal ?? (stored.training === false ? 'read' : 'train');
     const s = { ...DEFAULT_SETTINGS, ...stored, goal };
-    return { goal: s.goal, wpm: s.wpm, fontSize: s.fontSize, serif: s.serif, theme: s.theme, lang: s.lang };
+    return { goal: s.goal, wpm: s.wpm, fontSize: s.fontSize, serif: s.serif, theme: s.theme, lang: s.lang, ai: s.ai };
   },
   saveSettings: (s: Settings) => lsSet('settings', s),
   library: () => lsArr<DocMeta>('library').sort((a, b) => b.opened - a.opened),

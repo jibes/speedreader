@@ -33,14 +33,17 @@ export function Quiz({ questions, onDone }: { questions: Question[]; onDone: (co
   });
 
   const gist = q.kind === 'gist';
+  const ai = q.kind === 'ai';
   const [before, after] = q.prompt.split('_____');
   return (
     <div className="scrim">
       <div className="sheet" role="dialog" aria-label="Comprehension check">
-        <h3>{t('quiz.title')}</h3>
-        <p className="sub">{gist ? t('quiz.gistSub') : t('quiz.cloze')}</p>
+        <h3>{t('quiz.title')}{ai && <span className="badge">{t('quiz.aiBadge')}</span>}</h3>
+        <p className="sub">{ai ? t('quiz.aiSub') : gist ? t('quiz.gistSub') : t('quiz.cloze')}</p>
         <p className="q-prompt">
-          {gist ? (
+          {ai ? (
+            q.prompt
+          ) : gist ? (
             t('quiz.gistPrompt')
           ) : (
             <>

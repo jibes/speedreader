@@ -1,8 +1,10 @@
 import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { aiAvailability, aiQuiz, enableAi, type AiState } from '../core/ai';
 import { makeQuiz, type Question } from '../core/quiz';
 import { gistQuiz, planSkim, SKIM_PACE } from '../core/skim';
 import { SECTION_WORDS, SKIM_SECTION_WORDS, store, type DocMeta, type Settings } from '../core/store';
 import { buildDoc, type Doc } from '../core/text';
+import { detectTextLang } from '../core/textlang';
 import { clampWpm, nextWpm, startFromBaseline } from '../core/trainer';
 import { Back, Close, Minus, Pause, Play, PlusI, TextSize } from './icons';
 import { Quiz, Result, type ResultInfo } from './Quiz';
@@ -11,7 +13,34 @@ import { Seg, SettingsSheet } from './Settings';
 import { useWakeLock } from './useWakeLock';
 
 type QuizSheet = { kind: 'quiz'; questions: Question[]; from: number; to: number; ms: number; baseline?: boolean; skim?: boolean };
-type Sheet = { kind: 'settings' } | QuizSheet | { kind: 'result'; info: ResultInfo } | { kind: 'end' };
+type Sheet = { kind: 'settings' } | { kind: 'preparing' } | QuizSheet | { kind: 'result'; info: ResultInfo } | { kind: 'end' };
+
+/** AI generation may run while reading; at the checkpoint we wait at most this long */
+const AI_WAIT_MS = 25000;
+/** start generating this many words before the section ends */
+const AI_LEAD_WORDS = 150;
+
+const isEnd = (t: Doc['tokens'][number]) => t.end === 'sentence' || t.end === 'paragraph';
+
+/** where the clock will stop for a check if the reader keeps going: first sentence end ≥ section length */
+function predictEnd(d: Doc, from: number): number {
+  let e = Math.min(from + SECTION_WORDS - 1, d.tokens.length - 1);
+  while (e < d.tokens.length - 1 && !isEnd(d.tokens[e])) e++;
+  return e + 1;
+}
+
+function passageText(d: Doc, from: number, to: number): string {
+  let out = '';
+  for (let i = from; i < to; i++) {
+    const tok = d.tokens[i];
+    if (i > from && tok.p !== d.tokens[i - 1].p) out = out.trimEnd() + '\n\n';
+    out += tok.text + (tok.gap ? ' ' : '');
+  }
+  return out.trim();
+}
+
+const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T) =>
+  Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
 
 interface Baseline {
   from: number;
@@ -72,13 +101,41 @@ export function Reader({
   }, [meta.id, meta.pos]);
 
   const skim = useMemo(() => (doc && goal === 'skim' ? planSkim(doc) : null), [doc, goal]);
+
+  /* ── on-device AI questions ─────────────────────── */
+  const textLang = useMemo(() => (doc ? detectTextLang(doc.tokens.slice(0, 600).map((x) => x.text).join(' ')) : 'en'), [doc]);
+  const [aiState, setAiState] = useState<AiState>('unavailable');
+  const [aiProgress, setAiProgress] = useState(0);
+  useEffect(() => {
+    if (doc) aiAvailability(textLang).then(setAiState);
+  }, [doc, textLang]);
+  const useAi = settings.ai && aiState === 'available';
+  const pre = useRef<{ from: number; to: number; p: Promise<Question[]>; ctl: AbortController } | null>(null);
+
+  const prefetch = useCallback((from: number, to: number) => {
+    const d = live.current.doc;
+    if (!d || (pre.current && pre.current.from === from && pre.current.to === to)) return pre.current?.p;
+    pre.current?.ctl.abort();
+    const ctl = new AbortController();
+    const p = aiQuiz(passageText(d, from, to), textLang, ctl.signal);
+    pre.current = { from, to, p, ctl };
+    return p;
+  }, [textLang]);
+
+  useEffect(() => () => pre.current?.ctl.abort(), []);
+
+  async function enableAiNow() {
+    setAiState('downloading');
+    await enableAi(textLang, setAiProgress);
+    setAiState(await aiAvailability(textLang));
+  }
   // skim checks need text outside the section for wrong answers: ≥ 3 sections per document
   const section = goal === 'skim' ? Math.max(200, Math.min(SKIM_SECTION_WORDS, Math.round((doc?.tokens.length ?? 0) / 3))) : SECTION_WORDS;
   const cur: Cur = useMemo(() => ({ start: pos, end: pos + 1 }), [pos]);
 
   // latest values for callbacks fired from timers / unmount
-  const live = useRef({ pos, settings, doc, playing });
-  live.current = { pos, settings, doc, playing };
+  const live = useRef({ pos, settings, doc, playing, useAi });
+  live.current = { pos, settings, doc, playing, useAi };
 
   /* ── session accounting ─────────────────────────── */
   const segMs = () => seg.current.ms + (live.current.playing ? performance.now() - playStart.current : 0);
@@ -164,11 +221,16 @@ export function Reader({
   };
 
   /* ── checkpoint / quiz ──────────────────────────── */
-  const checkpoint = useCallback((end: number) => {
+  const checkpoint = useCallback(async (end: number) => {
     const d = live.current.doc!;
     const from = seg.current.start;
     const isSkim = live.current.settings.goal === 'skim';
-    const questions = isSkim ? gistQuiz(d, planSkim(d), from, end, 3) : makeQuiz(d, from, end, 3);
+    let questions: Question[] = [];
+    if (!isSkim && live.current.useAi) {
+      setSheet({ kind: 'preparing' });
+      questions = await withTimeout(prefetch(from, end) ?? Promise.resolve([]), AI_WAIT_MS, []);
+    }
+    if (questions.length < 2) questions = isSkim ? gistQuiz(d, planSkim(d), from, end, 3) : makeQuiz(d, from, end, 3);
     if (questions.length >= 2) {
       setSheet({ kind: 'quiz', questions, from, to: end, ms: seg.current.ms, skim: isSkim });
     } else {
@@ -179,7 +241,15 @@ export function Reader({
         setPlaying(true);
       }
     }
-  }, [logUntested]);
+  }, [logUntested, prefetch]);
+
+  // generate the coming section's questions in the background, ~30 s before it ends
+  useEffect(() => {
+    if (!doc || goal !== 'train' || !useAi || !playing) return;
+    const from = seg.current.start;
+    const to = predictEnd(doc, from);
+    if (pos >= to - AI_LEAD_WORDS) prefetch(from, to);
+  }, [pos, doc, goal, useAi, playing, prefetch]);
 
   /* ── the clock ──────────────────────────────────── */
   useEffect(() => {
@@ -258,10 +328,15 @@ export function Reader({
     if (doc && startWithBaseline) startBaseline();
   }, [doc, startWithBaseline, startBaseline]);
 
-  function finishBaseline() {
+  async function finishBaseline() {
     if (!doc || !baseline?.started) return;
     const ms = performance.now() - baseline.started;
-    const questions = makeQuiz(doc, baseline.from, baseline.to, 3);
+    let questions: Question[] = [];
+    if (useAi) {
+      setSheet({ kind: 'preparing' });
+      questions = await withTimeout(prefetch(baseline.from, baseline.to) ?? Promise.resolve([]), AI_WAIT_MS, []);
+    }
+    if (questions.length < 2) questions = makeQuiz(doc, baseline.from, baseline.to, 3);
     const q: QuizSheet = { kind: 'quiz', questions, from: baseline.from, to: baseline.to, ms, baseline: true };
     if (questions.length >= 2) setSheet(q);
     else quizDone({ ...q, questions: [{ prompt: '', options: [], answer: 0 }] }, 1);
@@ -342,7 +417,7 @@ export function Reader({
 
       <div className="r-stage">
         {baseline ? (
-          <BaselineView doc={doc} b={baseline} font={font} size={settings.fontSize} onStart={() => setBaseline({ ...baseline, started: performance.now() })} onDone={finishBaseline} onCancel={() => setBaseline(null)} />
+          <BaselineView doc={doc} b={baseline} font={font} size={settings.fontSize} onStart={() => { setBaseline({ ...baseline, started: performance.now() }); if (useAi) prefetch(baseline.from, baseline.to); }} onDone={finishBaseline} onCancel={() => setBaseline(null)} />
         ) : (
           <PacerView doc={doc} cur={cur} playing={playing} font={font} size={settings.fontSize} keyMask={skim?.key} onSeek={seek} onToggle={toggle} />
         )}
@@ -375,7 +450,17 @@ export function Reader({
         </div>
       )}
 
-      {sheet?.kind === 'settings' && <SettingsSheet s={settings} set={setSettings} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'settings' && (
+        <SettingsSheet s={settings} set={setSettings} onClose={() => setSheet(null)} ai={{ state: aiState, progress: aiProgress, enable: enableAiNow }} />
+      )}
+      {sheet?.kind === 'preparing' && (
+        <div className="scrim">
+          <div className="sheet preparing" role="status">
+            <span className="spinner" aria-hidden />
+            {t('quiz.preparing')}
+          </div>
+        </div>
+      )}
       {sheet?.kind === 'quiz' && <Quiz key={sheet.from} questions={sheet.questions} onDone={(c) => quizDone(sheet, c)} />}
       {sheet?.kind === 'result' && (
         <Result

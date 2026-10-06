@@ -271,6 +271,13 @@ table.sessions { width: 100%; border-collapse: collapse; font-size: 14px; font-v
 .sessions td { padding: 8px; border-bottom: 1px solid var(--line); }
 .sessions td:not(:first-child), .sessions th:not(:first-child) { text-align: right; }
 
+/* AI quiz */
+.badge { display: inline-block; vertical-align: 3px; margin-left: 8px; font-size: 11px; font-weight: 600; letter-spacing: .02em; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.preparing { max-width: 300px; display: flex; align-items: center; gap: 12px; color: var(--ink-2); }
+.spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.opt { line-height: 1.4; }
+
 /* backup */
 .backup p { margin: 0 0 14px; color: var(--ink-2); font-size: 14.5px; max-width: 60ch; }
 .backup-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
