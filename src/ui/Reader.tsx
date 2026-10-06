@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { makeQuiz, type Question } from '../core/quiz';
 import { store, type DocMeta, type Settings } from '../core/store';
 import { buildChunks, buildDoc, orpIndex, type Chunk, type Doc } from '../core/text';
@@ -21,7 +21,6 @@ interface Baseline {
 }
 
 const RAMP = 6;
-const PAGE_WORDS = 320;
 
 function findChunk(chunks: Chunk[], pos: number) {
   let lo = 0;
@@ -32,19 +31,6 @@ function findChunk(chunks: Chunk[], pos: number) {
     else hi = mid - 1;
   }
   return lo;
-}
-
-function buildPages(doc: Doc) {
-  const pages: { start: number; end: number }[] = [];
-  let start = 0;
-  for (const ps of doc.paragraphStarts) {
-    if (ps - start >= PAGE_WORDS) {
-      pages.push({ start, end: ps });
-      start = ps;
-    }
-  }
-  pages.push({ start, end: doc.tokens.length });
-  return pages;
 }
 
 export function Reader({
@@ -441,18 +427,132 @@ function renderParas(doc: Doc, start: number, end: number, cls: (i: number) => s
   return paras;
 }
 
+/* ── pacer: continuous scroll over a sliding window ─────────────
+ * Only ~2k words around the reading position are in the DOM, cut at
+ * sentence boundaries. When the window slides, the scroll offset is
+ * compensated so the text on screen never moves. Auto-scroll is a short
+ * eased step whenever the highlight reaches a new line, keeping the
+ * reading line at a fixed height (typewriter-style).
+ */
+const WIN_BEFORE = 600;
+const WIN_AFTER = 1500;
+const READ_LINE = 0.35;
+
+function sentenceAt(doc: Doc, i: number) {
+  return doc.sentenceStarts[doc.tokens[Math.max(0, Math.min(i, doc.tokens.length - 1))].s];
+}
+
+function windowAround(doc: Doc, pos: number) {
+  const n = doc.tokens.length;
+  const start = sentenceAt(doc, pos - WIN_BEFORE);
+  const endTok = pos + WIN_AFTER;
+  const end = endTok >= n ? n : sentenceAt(doc, endTok);
+  return { start, end: Math.max(end, Math.min(n, pos + 1)) };
+}
+
+const Para = memo(function Para({
+  doc,
+  start,
+  end,
+  curStart,
+  curEnd,
+  onWord,
+}: {
+  doc: Doc;
+  start: number;
+  end: number;
+  curStart: number;
+  curEnd: number;
+  onWord: (i: number) => void;
+}) {
+  const words: ReactElement[] = [];
+  for (let i = start; i < end; i++) {
+    const cls = i < curStart ? 'w read' : i < curEnd ? 'w cur' : 'w';
+    words.push(<span key={i} data-i={i} className={cls}>{doc.tokens[i].text}</span>, <span key={'s' + i}> </span>);
+  }
+  return <p onClick={(e) => { const i = (e.target as HTMLElement).dataset.i; if (i) onWord(+i); }}>{words}</p>;
+});
+
 function PacerView({ doc, cur, playing, font, size, onSeek, onToggle }: { doc: Doc; cur: Chunk; playing: boolean; font: string; size: number; onSeek: (i: number) => void; onToggle: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  const pages = useMemo(() => buildPages(doc), [doc]);
-  const page = pages[pages.findIndex((pg) => cur.start < pg.end)] ?? pages[pages.length - 1];
+  const [win, setWin] = useState(() => windowAround(doc, cur.start));
+  const anchor = useRef<{ i: number; top: number; start: number } | null>(null);
+  const lineTop = useRef<number | null>(null);
+  const anim = useRef(0);
+  // scroll events caused by our own scrolling must not grow the window
+  const autoScrollUntil = useRef(0);
+
+  // slide the window with hysteresis (setState during render is the React-sanctioned derive pattern)
+  const n = doc.tokens.length;
+  if (
+    cur.start < win.start ||
+    cur.start >= win.end ||
+    (win.start > 0 && cur.start - win.start < WIN_BEFORE / 3) ||
+    (win.end < n && win.end - cur.start < WIN_AFTER / 2)
+  ) {
+    const next = windowAround(doc, cur.start);
+    if (next.start !== win.start || next.end !== win.end) setWin(next);
+  }
+
+  const scrollTo = (box: HTMLElement, to: number) => {
+    cancelAnimationFrame(anim.current);
+    const from = box.scrollTop;
+    const target = Math.max(0, to);
+    if (Math.abs(target - from) < 1) return;
+    const ms = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220;
+    const t0 = performance.now();
+    autoScrollUntil.current = t0 + ms + 100;
+    const step = (t: number) => {
+      const k = ms ? Math.min(1, (t - t0) / ms) : 1;
+      box.scrollTop = from + (target - from) * (1 - (1 - k) ** 3);
+      if (k < 1) anim.current = requestAnimationFrame(step);
+    };
+    anim.current = requestAnimationFrame(step);
+  };
 
   useLayoutEffect(() => {
     const box = ref.current;
-    const el = box?.querySelector<HTMLElement>('.cur');
-    if (!box || !el) return;
-    const target = el.offsetTop - box.clientHeight * 0.32;
-    if (Math.abs(box.scrollTop - target) > size * 1.2) box.scrollTo({ top: Math.max(0, target) });
-  }, [cur.start, page.start, size]);
+    if (!box) return;
+    // 1. window slid: keep on-screen text where it was
+    const a = anchor.current;
+    if (a && a.start !== win.start) {
+      const el = box.querySelector<HTMLElement>(`[data-i="${a.i}"]`);
+      if (el) {
+        const delta = el.offsetTop - a.top;
+        cancelAnimationFrame(anim.current);
+        autoScrollUntil.current = performance.now() + 100;
+        box.scrollTop += delta;
+        if (lineTop.current !== null) lineTop.current += delta;
+      } else lineTop.current = null;
+    }
+    // 2. follow the highlight: one eased step per new line
+    const el = box.querySelector<HTMLElement>('.cur');
+    if (el) {
+      const top = el.offsetTop;
+      if (lineTop.current === null || Math.abs(top - lineTop.current) > size * 0.5) {
+        lineTop.current = top;
+        scrollTo(box, top - box.clientHeight * READ_LINE);
+      }
+      anchor.current = { i: cur.start, top, start: win.start };
+    }
+  }, [cur.start, win.start, win.end]);
+
+  // re-centre after text size or typeface change
+  useLayoutEffect(() => {
+    lineTop.current = null;
+  }, [size, font]);
+
+  useEffect(() => () => cancelAnimationFrame(anim.current), []);
+
+  // paragraph slices inside the window; untouched ones are memoised
+  const paras: { start: number; end: number }[] = [];
+  for (let i = win.start; i < win.end; ) {
+    const p = doc.tokens[i].p;
+    let j = i + 1;
+    while (j < win.end && doc.tokens[j].p === p) j++;
+    paras.push({ start: i, end: j });
+    i = j;
+  }
 
   return (
     <div
@@ -460,8 +560,32 @@ function PacerView({ doc, cur, playing, font, size, onSeek, onToggle }: { doc: D
       className={`pacer${playing ? ' playing' : ''}`}
       style={{ fontFamily: font, fontSize: size, lineHeight: 1.7 }}
       onClick={(e) => !(e.target as HTMLElement).dataset.i && onToggle()}
+      onScroll={(e) => {
+        // manual scrolling: grow the window so the whole text is reachable
+        const box = e.currentTarget;
+        if (performance.now() < autoScrollUntil.current) return;
+        if (box.scrollTop < box.clientHeight && win.start > 0) {
+          setWin((w) => ({ ...w, start: sentenceAt(doc, w.start - WIN_BEFORE) }));
+        } else if (box.scrollHeight - box.scrollTop - box.clientHeight < box.clientHeight && win.end < n) {
+          setWin((w) => ({ ...w, end: w.end + WIN_AFTER >= n ? n : sentenceAt(doc, w.end + WIN_AFTER) }));
+        }
+      }}
     >
-      {renderParas(doc, page.start, page.end, (i) => (i < cur.start ? 'w read' : i < cur.end ? 'w cur' : 'w'), onSeek)}
+      {paras.map((p) => {
+        const before = cur.start >= p.end;
+        const after = cur.end <= p.start;
+        return (
+          <Para
+            key={p.start}
+            doc={doc}
+            start={p.start}
+            end={p.end}
+            curStart={before ? Infinity : after ? -1 : cur.start}
+            curEnd={before ? Infinity : after ? -1 : cur.end}
+            onWord={onSeek}
+          />
+        );
+      })}
     </div>
   );
 }
