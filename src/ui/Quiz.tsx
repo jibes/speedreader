@@ -62,7 +62,7 @@ export function Quiz({ questions, onDone }: { questions: Question[]; onDone: (co
           ))}
         </div>
         <div className="q-foot">
-          <span>Press 1–{q.options.length}</span>
+          <span className="keys">Press 1–{q.options.length}</span>
           <span className="dots">{questions.map((_, k) => <i key={k} className={k <= i ? 'on' : ''} />)}</span>
         </div>
       </div>
@@ -80,61 +80,59 @@ export interface ResultInfo {
   skim?: boolean;
 }
 
-export function Result({ r, onContinue, onClose }: { r: ResultInfo; onContinue: () => void; onClose?: () => void }) {
+export function Result({ r, onContinue, onClose, onRetry }: { r: ResultInfo; onContinue: () => void; onClose: () => void; onRetry?: () => void }) {
+  const pct = Math.round(r.accuracy * 100);
   const eff = Math.round(r.wpm * r.accuracy);
-  const diff = r.nextWpm !== undefined ? r.nextWpm - r.wpm : 0;
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        onContinue();
+        if (r.invalid && onRetry) onRetry();
+        else onContinue();
       }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   });
+
+  if (r.invalid) {
+    return (
+      <div className="scrim">
+        <div className="sheet result" role="dialog" aria-label="Result">
+          <h3>Too fast to measure</h3>
+          <p className="note">That was quicker than reading is physically possible — probably skimmed. Nothing was saved.</p>
+          <div className="actions">
+            <button className="btn secondary" onClick={onClose}>Not now</button>
+            {onRetry && <button className="btn" autoFocus onClick={onRetry}>Try again</button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const label = r.baseline ? 'Your natural reading speed' : r.skim ? 'Skimming speed' : 'Effective reading rate';
+  const big = r.baseline || r.skim ? r.wpm : eff;
+  const line = r.skim ? `${pct} % of topics caught` : r.baseline ? `${pct} % understood` : `${r.wpm} wpm × ${pct} % understood`;
+  let note = '';
+  if (r.skim) note = r.accuracy >= 0.66 ? 'You caught the main topics.' : 'Topics slipped — slow down a little or skim with a question in mind.';
+  else if (r.baseline && r.nextWpm) note = `Training starts at ${r.nextWpm} wpm — just above your comfort zone.`;
+  else if (r.nextWpm !== undefined) {
+    const d = r.nextWpm - r.wpm;
+    note = d > 0 ? `Good understanding — speeding up to ${r.nextWpm} wpm.` : d < 0 ? `Some details slipped — easing to ${r.nextWpm} wpm.` : `Holding at ${r.nextWpm} wpm.`;
+  }
   return (
     <div className="scrim">
       <div className="sheet result" role="dialog" aria-label="Result">
-        <p className="sub" style={{ margin: 0 }}>{r.baseline ? 'Your natural reading speed' : r.skim ? 'Skimming speed' : 'Effective reading rate'}</p>
+        <p className="sub" style={{ margin: 0 }}>{label}</p>
         <div className="big">
-          {r.baseline || r.skim ? r.wpm : eff}
+          {big}
           <small>wpm</small>
         </div>
-        {r.skim ? (
-          <div className="kv kv-2">
-            <div><b>{r.wpm}</b><span>words covered / min</span></div>
-            <div><b>{Math.round(r.accuracy * 100)}%</b><span>gist</span></div>
-          </div>
-        ) : (
-          <div className="kv">
-            <div><b>{r.wpm}</b><span>speed</span></div>
-            <div><b>{Math.round(r.accuracy * 100)}%</b><span>comprehension</span></div>
-            <div><b>{eff}</b><span>effective</span></div>
-          </div>
-        )}
-        {r.skim && (
-          <p className="sub">
-            {r.accuracy >= 0.67 ? 'You caught the main topics.' : 'Topics slipped — slow the pace a little or skim with a question in mind.'}
-          </p>
-        )}
-        {r.invalid && <p className="sub">That's faster than reading is physically possible — probably skimmed. Not saved; try the test again.</p>}
-        {r.nextWpm !== undefined && (
-          <p className="sub">
-            {r.baseline ? (
-              <>Training starts at <b>{r.nextWpm} wpm</b> — just above your comfort zone.</>
-            ) : diff > 0 ? (
-              <>Good understanding — pace goes up to <b className="delta-up">{r.nextWpm} wpm</b>.</>
-            ) : diff < 0 ? (
-              <>Some details slipped — easing to <b className="delta-down">{r.nextWpm} wpm</b>.</>
-            ) : (
-              <>Holding at <b>{r.nextWpm} wpm</b>.</>
-            )}
-          </p>
-        )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-          {onClose && <button className="btn secondary" onClick={onClose}>Done</button>}
-          <button className="btn" autoFocus onClick={onContinue}>Continue reading</button>
+        <p className="line">{line}</p>
+        {note && <p className="note">{note}</p>}
+        <div className="actions">
+          <button className="btn secondary" onClick={onClose}>Pause</button>
+          <button className="btn" autoFocus onClick={onContinue}>Continue</button>
         </div>
       </div>
     </div>

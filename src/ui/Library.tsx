@@ -6,6 +6,7 @@ import { extractText, titleFrom } from '../core/extract';
 import { SAMPLE, SAMPLE_TITLE } from '../core/sample';
 import { store, type DocMeta } from '../core/store';
 import { normaliseText, wordCount } from '../core/text';
+import { Clip } from './icons';
 
 const ACCEPT = '.txt,.md,.markdown,.pdf,.docx,.epub,.odt,.rtf,.html,.htm,.xhtml,.srt,.vtt,.csv,.json,.xml,image/*,text/*';
 
@@ -120,23 +121,22 @@ export function Library({
     <div className="page">
       <h1>Read faster.<br />Understand more.</h1>
       <p className="lede">
-        Paste text or a link, or drop any file — PDF, Word, EPUB, web page, even a photo of a page. Lumen paces you just above your
-        comfortable speed and checks understanding, so you get faster without losing the point.
+        Paste text or a link, or drop any file. Lumen paces you just above your comfort zone and checks that you still understand.
       </p>
 
       <div className={`drop${over ? ' over' : ''}`}>
         <textarea
           aria-label="Text to read"
-          placeholder="Paste text or a link, or drop a file anywhere…"
+          placeholder="Paste text or a link…"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         <div className="drop-bar">
-          <span className="hint">
-            {isLink ? 'Link — Lumen fetches the article text' : text ? `${wordCount(text).toLocaleString()} words` : 'Text, link, or PDF · DOCX · EPUB · ODT · RTF · HTML · MD · images'}
-          </span>
           <input ref={fileRef} type="file" accept={ACCEPT} hidden onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-          <button className="btn secondary" onClick={() => fileRef.current?.click()}>Open file</button>
+          <button className="ghost attach" onClick={() => fileRef.current?.click()} title="PDF, Word, EPUB, ODT, RTF, HTML, Markdown, text or a photo of a page">
+            <Clip /> Open file
+          </button>
+          <span className="hint">{isLink ? 'Link' : text ? `${wordCount(text).toLocaleString()} words` : ''}</span>
           <button
             className="btn"
             disabled={!text.trim()}
@@ -150,13 +150,12 @@ export function Library({
 
       {!hasSessions && (
         <>
-          <h2>New here?</h2>
-          <button className="doc" onClick={() => add(SAMPLE_TITLE, SAMPLE, { baseline: true })}>
+          <button className="callout" onClick={() => add(SAMPLE_TITLE, SAMPLE, { baseline: true })}>
             <div>
-              <div className="doc-title">Take the 2-minute speed test</div>
-              <div className="doc-meta">Measures your natural speed and comprehension, then sets your training pace.</div>
+              <b>New here? Take the 2-minute speed test</b>
+              <span>Measures your natural speed and sets your starting pace.</span>
             </div>
-            <span className="doc-meta">→</span>
+            <span aria-hidden>→</span>
           </button>
         </>
       )}
