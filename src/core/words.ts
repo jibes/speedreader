@@ -1,0 +1,11 @@
+/** High-frequency words (EN + DE). Used for the frequency effect and to skip trivial quiz targets. */
+const COMMON = new Set(
+  (
+    'the be to of and a in that have i it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us is was are were been has had did said made very much more many such own same each those where why while through still should may might must here off again never always often both few long great little old right big high small large next early young important public bad different able last late hard major better best real sure free full open short whole clear true whole however without within between under during before around against among upon being thing things man men woman women child world life hand part place case week company system program question government number night point home water room mother area money story fact month lot study book eye job word business issue side kind head house service friend father power hour game line end member law car city community name president team minute idea kid body information school face others level office door health person art war history party result change morning reason research girl guy moment air teacher force education ' +
+    'der die das und in den von zu mit sich des auf für ist im dem nicht ein eine als auch es an werden aus er hat dass sie nach wird bei einer um am sind noch wie einem über einen so zum war haben nur oder aber vor zur bis mehr durch man sein wurde sei wenn können diese schon ich mich mir du wir ihr ihm ihn uns euch was wer wo hier dort dann denn doch nun sehr immer wieder alle viele einige kein keine ohne unter zwischen gegen seit während weil damit jetzt heute jahr jahre zeit mensch menschen leben welt land stadt gut groß neu alt erste ganz'
+  ).split(/\s+/),
+);
+
+export function isCommon(word: string): boolean {
+  return COMMON.has(word.toLowerCase());
+}
