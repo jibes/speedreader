@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { registerSW } from 'virtual:pwa-register';
 import { completeLogin } from '../core/openrouter';
 import { sampleFor } from '../core/sample';
 import { store, type DocMeta, type Settings } from '../core/store';
@@ -20,6 +21,25 @@ export default function App() {
   const [incoming, setIncoming] = useState<{ text?: string; files?: File[] }>(readShare);
   const install = useInstallPrompt();
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
+  const [update, setUpdate] = useState<null | (() => void)>(null);
+
+  // offer a reload when a new version is deployed; check hourly and when the app comes back
+  useEffect(() => {
+    const updateSW = registerSW({
+      onNeedRefresh: () =>
+        setUpdate(() => () => {
+          // activate the waiting version, then load it (reload explicitly; don't depend on the library event)
+          navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+          updateSW(true);
+          setTimeout(() => location.reload(), 2500);
+        }),
+      onRegisteredSW(_url, reg) {
+        if (!reg) return;
+        setInterval(() => reg.update(), 60 * 60 * 1000);
+        document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && reg.update());
+      },
+    });
+  }, []);
 
   // returning from "Sign in with OpenRouter": exchange the code, reopen the text
   useEffect(() => {
@@ -65,10 +85,17 @@ export default function App() {
     else root.dataset.theme = settings.theme;
   }, [settings.theme]);
 
-  const toastEl = toast && (
-    <div className={`toast${toast.err ? ' err' : ''}`} role="status">
-      {toast.msg}
+  const toastEl = update ? (
+    <div className="toast" role="status">
+      {t('update.ready')}
+      <button className="toast-btn" onClick={update}>{t('update.reload')}</button>
     </div>
+  ) : (
+    toast && (
+      <div className={`toast${toast.err ? ' err' : ''}`} role="status">
+        {toast.msg}
+      </div>
+    )
   );
 
   if (open) {

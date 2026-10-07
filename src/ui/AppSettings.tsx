@@ -28,6 +28,8 @@ export function AppSettings({ s, set }: { s: Settings; set: (p: Partial<Settings
       <AiSettings s={s} set={set} />
 
       <BackupPanel onRestored={() => {}} />
+
+      <p className="version">{t('app.version', { v: new Date(__BUILD_TIME__).toLocaleString(getLang(), { dateStyle: 'medium', timeStyle: 'short' }) })}</p>
     </div>
   );
 }

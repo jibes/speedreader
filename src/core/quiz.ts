@@ -56,7 +56,9 @@ export function makeQuiz(doc: Doc, from: number, to: number, n = 3, rnd: () => n
     arr.push(from + i);
     sentences.set(t.s, arr);
   });
-  const candidates = shuffle([...sentences.values()].filter((s) => s.length >= 6), rnd);
+  // only complete sentences: a "sentence" cut off by a PDF page break makes an unfair question
+  const complete = (idxs: number[]) => /[.!?…。！？]["'”’»)\]」』）]*$/.test(doc.tokens[idxs[idxs.length - 1]].text);
+  const candidates = shuffle([...sentences.values()].filter((s) => s.length >= 6 && complete(s)), rnd);
   // spread questions across the passage: sort chosen by position afterwards
   const picked: Question[] = [];
   const used = new Set<string>();
