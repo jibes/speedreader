@@ -67,3 +67,38 @@ describe('extract', () => {
     expect(rtf('{\\rtf1\\ansi {\\b Hello} world\\par Caf\\\'e9}').trim()).toBe('Hello world\nCafé');
   });
 });
+
+import { pdfPageText } from '../src/core/extract';
+
+describe('PDF text', () => {
+  const item = (str: string, x: number, y: number, width = str.length * 5) => ({ str, transform: [1, 0, 0, 1, x, y], width, height: 10 });
+
+  it('keeps wrapped lines in one paragraph and splits on larger gaps', () => {
+    const text = pdfPageText([
+      item('Artificial intelligence (AI) is the capability', 50, 700),
+      item('of computational systems to perform tasks', 50, 686),
+      item('typically associated with human intelligence.', 50, 672),
+      item('A second paragraph starts after a bigger gap', 50, 644),
+      item('and continues here.', 50, 630),
+    ]);
+    expect(text.split('\n\n')).toHaveLength(2);
+    expect(normaliseText(text)).toBe(
+      'Artificial intelligence (AI) is the capability of computational systems to perform tasks typically associated with human intelligence.\n\nA second paragraph starts after a bigger gap and continues here.',
+    );
+  });
+
+  it('joins items on one baseline, adding a space only where the PDF leaves a gap', () => {
+    expect(pdfPageText([item('Hello', 50, 700, 25), item('world', 80, 700), item('!', 105, 700)])).toBe('Hello world!');
+  });
+});
+
+describe('broken paragraphs', () => {
+  it('joins a "paragraph" that stops mid-sentence and continues in lowercase', () => {
+    expect(normaliseText('perform tasks typically\n\nassociated with humans.\n\nNext paragraph.')).toBe('perform tasks typically associated with humans.\n\nNext paragraph.');
+  });
+  it('keeps headings and real paragraphs', () => {
+    expect(normaliseText('Artificial intelligence\n\nArtificial intelligence (AI) is a field.\n\nit continues? no: lowercase after a full stop stays separate.')).toBe(
+      'Artificial intelligence\n\nArtificial intelligence (AI) is a field.\n\nit continues? no: lowercase after a full stop stays separate.',
+    );
+  });
+});
