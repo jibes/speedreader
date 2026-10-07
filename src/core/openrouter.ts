@@ -105,31 +105,32 @@ interface ModelInfo {
 }
 
 /** Families that write good multilingual questions, best first. */
-const PREFERRED = [/deepseek/i, /qwen3/i, /llama-3\.3-70b|llama-4/i, /gemma-3-27b|gemma-4/i, /mistral-small|mistral-medium/i, /gpt-oss/i];
+const PREFERRED = [/deepseek-(v3|chat)/i, /qwen3/i, /llama-3\.3-70b|llama-4/i, /gemma-3-27b|gemma-4/i, /mistral-small|mistral-medium/i, /gpt-oss/i];
+/** reasoning models spend the time budget thinking — avoid when possible */
+const SLOW = /(^|[/-])r1\b|reason|think|qwq/i;
 
-/** Pick up to 3 free models that support structured output, as a fallback chain. */
-export function pickFreeModels(list: ModelInfo[]): string[] {
-  const free = list.filter(
-    (m) =>
-      (m.id.endsWith(':free') || (m.pricing?.prompt === '0' && m.pricing?.completion === '0')) &&
-      (m.context_length ?? 0) >= 8000 &&
-      (m.supported_parameters ?? []).some((p) => p === 'response_format' || p === 'structured_outputs'),
-  );
-  const rank = (id: string) => {
-    const i = PREFERRED.findIndex((r) => r.test(id));
-    return i < 0 ? PREFERRED.length : i;
+const isFree = (m: ModelInfo) => m.id.endsWith(':free') || (m.pricing?.prompt === '0' && m.pricing?.completion === '0');
+const structured = (m: ModelInfo) => (m.supported_parameters ?? []).some((p) => p === 'response_format' || p === 'structured_outputs');
+
+/** Up to 3 free models as a fallback chain: structured output and fast families first. */
+export function pickFreeModels(list: ModelInfo[]): { ids: string[]; structured: boolean } {
+  const free = list.filter((m) => isFree(m) && (m.context_length ?? 0) >= 8000);
+  const rank = (m: ModelInfo) => {
+    const fam = PREFERRED.findIndex((r) => r.test(m.id));
+    return (structured(m) ? 0 : 100) + (SLOW.test(m.id) ? 50 : 0) + (fam < 0 ? PREFERRED.length : fam);
   };
-  return free.sort((a, b) => rank(a.id) - rank(b.id)).slice(0, 3).map((m) => m.id);
+  const chosen = free.sort((a, b) => rank(a) - rank(b)).slice(0, 3);
+  return { ids: chosen.map((m) => m.id), structured: chosen.length > 0 && chosen.every(structured) };
 }
 
-let modelCache: { at: number; ids: string[] } | null = null;
+let modelCache: { at: number; pick: ReturnType<typeof pickFreeModels> } | null = null;
 
-async function freeModels(): Promise<string[]> {
-  if (modelCache && Date.now() - modelCache.at < 6 * 3600e3) return modelCache.ids;
+async function freeModels() {
+  if (modelCache && Date.now() - modelCache.at < 6 * 3600e3) return modelCache.pick;
   const res = await fetch(`${API}/models`);
   const d = (await res.json()) as { data?: ModelInfo[] };
-  modelCache = { at: Date.now(), ids: pickFreeModels(d.data ?? []) };
-  return modelCache.ids;
+  modelCache = { at: Date.now(), pick: pickFreeModels(d.data ?? []) };
+  return modelCache.pick;
 }
 
 export class PolicyError extends Error {}
@@ -137,40 +138,54 @@ export class PolicyError extends Error {}
 /**
  * OpenRouter engine. `allowTraining: false` (default) routes only to providers
  * that don't store or train on prompts; if none serve the free models the call
- * fails with PolicyError and Lumen falls back to fill-in-the-blank.
+ * fails with PolicyError and the settings explain it.
+ * Tries strict JSON-schema output first; if no free endpoint supports it,
+ * retries with the schema in the prompt (the pipeline validates either way).
  */
 export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): Engine => ({
   name: 'openrouter',
   async ask(system, user, schema, signal) {
-    const models = await freeModels();
-    if (!models.length) throw new Error('no free models');
-    const res = await fetch(`${API}/chat/completions`, {
-      method: 'POST',
-      signal,
-      headers: {
-        Authorization: `Bearer ${auth.key}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': location.origin,
-        'X-Title': 'Lumen',
-      },
-      body: JSON.stringify({
-        models,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        response_format: { type: 'json_schema', json_schema: { name: 'result', strict: true, schema } },
-        provider: { data_collection: allowTraining ? 'allow' : 'deny', require_parameters: true },
-        temperature: 0.3,
-      }),
-    });
-    if (res.status === 401) disconnect();
-    const d = (await res.json()) as { choices?: { message?: { content?: string } }[]; error?: { message?: string } };
+    const pick = await freeModels();
+    if (!pick.ids.length) throw new Error('no free models');
+    const call = async (strict: boolean) => {
+      const res = await fetch(`${API}/chat/completions`, {
+        method: 'POST',
+        signal,
+        headers: {
+          Authorization: `Bearer ${auth.key}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': location.origin,
+          'X-Title': 'Lumen',
+        },
+        body: JSON.stringify({
+          models: pick.ids,
+          messages: [
+            { role: 'system', content: strict ? system : `${system}\n\nReply with JSON only, no prose, matching this JSON schema:\n${JSON.stringify(schema)}` },
+            { role: 'user', content: user },
+          ],
+          ...(strict ? { response_format: { type: 'json_schema', json_schema: { name: 'result', strict: true, schema } } } : {}),
+          provider: { data_collection: allowTraining ? 'allow' : 'deny', require_parameters: strict },
+          temperature: 0.3,
+          max_tokens: 1500,
+        }),
+      });
+      if (res.status === 401) disconnect();
+      const d = (await res.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[]; error?: { message?: string } };
+      return { res, d, msg: d.error?.message ?? `HTTP ${res.status}` };
+    };
+
+    let { res, d, msg } = await call(pick.structured);
+    // no endpoint can do structured output (or similar parameter mismatch) → prompt-only JSON
+    if (!res.ok && pick.structured && res.status !== 401 && res.status !== 402 && res.status !== 429 && !/data policy|data_collection/i.test(msg)) {
+      ({ res, d, msg } = await call(false));
+    }
     if (!res.ok) {
-      const msg = d.error?.message ?? String(res.status);
-      if (/data policy|data_collection|no endpoints/i.test(msg)) throw new PolicyError(msg);
+      if (/data policy|data_collection/i.test(msg)) throw new PolicyError(msg);
+      if (res.status === 429) throw new Error(`rate limit: ${msg}`);
       throw new Error(msg);
     }
-    return d.choices?.[0]?.message?.content ?? '';
+    const content = d.choices?.[0]?.message?.content ?? '';
+    if (!content.trim()) throw new Error('empty answer');
+    return content;
   },
 });

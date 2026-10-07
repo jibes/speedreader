@@ -46,6 +46,7 @@ describe('model choice', () => {
       supported_parameters: params,
     });
     const ids = pickFreeModels([
+      m('deepseek/deepseek-r1:free'),
       m('someone/tiny:free'),
       m('openai/gpt-5', false),
       m('qwen/qwen3-32b:free'),
@@ -53,7 +54,7 @@ describe('model choice', () => {
       m('deepseek/deepseek-v3:free'),
       m('mistral/mistral-small:free'),
     ]);
-    expect(ids).toEqual(['deepseek/deepseek-v3:free', 'qwen/qwen3-32b:free', 'mistral/mistral-small:free']);
+    expect(ids).toEqual({ ids: ['deepseek/deepseek-v3:free', 'qwen/qwen3-32b:free', 'mistral/mistral-small:free'], structured: true });
   });
 });
 
@@ -71,6 +72,22 @@ describe('engine', () => {
     expect(body.response_format.type).toBe('json_schema');
     expect(body.provider.data_collection).toBe('deny');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer k');
+  });
+
+  it('falls back to prompt-only JSON when no endpoint supports structured output', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/models')) return models.clone();
+      const body = JSON.parse(init!.body as string);
+      bodies.push(body);
+      return body.response_format
+        ? Response.json({ error: { message: 'No endpoints found that can handle the requested parameters' } }, { status: 404 })
+        : Response.json({ choices: [{ message: { content: 'Sure! {"answers":[2]}' } }] });
+    }));
+    const out = await openRouterEngine({ key: 'k', at: 0 }, false).ask('sys', 'user', { type: 'object' });
+    expect(out).toContain('"answers"');
+    expect(bodies).toHaveLength(2);
+    expect((bodies[1] as { messages: { content: string }[] }).messages[0].content).toContain('JSON schema');
   });
 
   it('reports a data-policy refusal so the UI can explain it', async () => {
