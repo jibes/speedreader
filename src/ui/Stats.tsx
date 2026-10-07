@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { store, type Session } from '../core/store';
 import { fmtDate, t } from '../i18n';
-import { BackupPanel } from './Backup';
 
 
 function minutes(ms: number) {
@@ -10,9 +9,7 @@ function minutes(ms: number) {
 }
 
 export function Stats({ onRetest }: { onRetest: () => void }) {
-  const [version, setVersion] = useState(0);
-  const sessions = useMemo(() => store.sessions(), [version]);
-  const backup = <BackupPanel onRestored={() => setVersion((v) => v + 1)} />;
+  const sessions = useMemo(() => store.sessions(), []);
   // effective rate only makes sense for full reading, not skimming
   const tested = sessions.filter((s) => s.accuracy !== undefined && s.goal !== 'skim');
   const words = sessions.reduce((a, s) => a + s.words, 0);
@@ -30,7 +27,6 @@ export function Stats({ onRetest }: { onRetest: () => void }) {
         <h1>{t('stats.title')}</h1>
         <p className="lede">{t('stats.empty')}</p>
         <button className="btn secondary" onClick={onRetest}>{t('stats.takeTest')}</button>
-        {backup}
       </div>
     );
   }
@@ -73,7 +69,6 @@ export function Stats({ onRetest }: { onRetest: () => void }) {
           ))}
         </tbody>
       </table>
-      {backup}
     </div>
   );
 }

@@ -74,6 +74,8 @@ button { cursor: pointer; }
   padding: calc(14px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 14px calc(20px + env(safe-area-inset-left)); max-width: 920px; width: 100%; margin: 0 auto;
 }
 .brand { font-weight: 650; letter-spacing: -0.02em; font-size: 18px; display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; }
+.gear { display: grid; place-items: center; width: 34px; padding: 7px !important; }
+.gear svg { width: 18px; height: 18px; }
 .brand i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
 .nav { margin-left: auto; display: flex; gap: 2px; }
 .nav button, .ghost {
@@ -290,20 +292,26 @@ table.sessions { width: 100%; border-collapse: collapse; font-size: 14px; font-v
 }
 .toast.err { background: var(--accent); color: #fff; }
 
+/* app settings page */
+.settings-page .tile { padding: 4px 18px; }
+.settings-page h1 + .tile { margin-top: 8px; }
+.settings-page .tile .row:first-child { border-top: 0; }
+.select { appearance: none; border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 7px 30px 7px 14px; font-size: 14px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 52%, calc(100% - 11px) 52%; background-size: 5px 5px; background-repeat: no-repeat; max-width: 100%; }
+.settings-page .backup { padding: 16px 18px; }
+
 /* backup */
 .backup p { margin: 0 0 14px; color: var(--ink-2); font-size: 14.5px; max-width: 60ch; }
 .backup-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .backup-actions .doc-meta { margin-right: auto; }
 .backup .status { margin-top: 8px; min-height: 0; }
+@media (max-width: 440px) {
+  .brand span { display: none; }
+  .nav button { padding: 7px 9px; }
+  .gear { width: 32px; }
+}
 @media (max-width: 600px) { .backup-actions .doc-meta { flex: 1 1 100%; } }
-
-/* footer: language */
-.foot { margin-top: auto; display: flex; justify-content: center; padding: 8px 16px calc(24px + env(safe-area-inset-bottom)); }
-.foot label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 13px; }
-.foot svg { width: 15px; height: 15px; }
-.foot select { appearance: none; border: 0; background: none; color: var(--ink-2); font-size: 13px; padding: 4px 2px; cursor: pointer; }
-.foot select:hover { color: var(--ink); }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* science */
 .prose { max-width: 64ch; }

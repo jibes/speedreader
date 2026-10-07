@@ -4,6 +4,7 @@ const ru: Dict = {
   'nav.read': 'Чтение',
   'nav.progress': 'Прогресс',
   'nav.science': 'Наука',
+  'nav.settings': 'Настройки',
   'nav.install': 'Установить',
   'lang.label': 'Язык',
   'lang.auto': 'Автоматически ({lang})',

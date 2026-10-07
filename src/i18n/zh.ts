@@ -4,6 +4,7 @@ const zh: Dict = {
   'nav.read': '阅读',
   'nav.progress': '进度',
   'nav.science': '科学',
+  'nav.settings': '设置',
   'nav.install': '安装',
   'lang.label': '语言',
   'lang.auto': '自动（{lang}）',

@@ -4,6 +4,7 @@ const en = {
   'nav.read': 'Read',
   'nav.progress': 'Progress',
   'nav.science': 'Science',
+  'nav.settings': 'Settings',
   'nav.install': 'Install',
   'lang.label': 'Language',
   'lang.auto': 'Automatic ({lang})',

@@ -1,5 +1,5 @@
 import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { aiAvailability, aiQuiz, chromeEngine, enableAi, lastOutcome, onOutcome, reportOutcome, type AiOutcome, type AiState, type Engine } from '../core/ai';
+import { aiAvailability, aiQuiz, chromeEngine, reportOutcome, type AiState, type Engine } from '../core/ai';
 import * as openrouter from '../core/openrouter';
 import { makeQuiz, type Question } from '../core/quiz';
 import { gistQuiz, planSkim, SKIM_PACE } from '../core/skim';
@@ -10,7 +10,8 @@ import { clampWpm, nextWpm, startFromBaseline } from '../core/trainer';
 import { Back, Close, Minus, Pause, Play, PlusI, TextSize } from './icons';
 import { Quiz, Result, type ResultInfo } from './Quiz';
 import { t } from '../i18n';
-import { Seg, SettingsSheet } from './Settings';
+import { Seg } from './controls';
+import { TextSheet } from './TextSheet';
 import { useWakeLock } from './useWakeLock';
 
 type QuizSheet = { kind: 'quiz'; questions: Question[]; from: number; to: number; ms: number; baseline?: boolean; skim?: boolean };
@@ -118,12 +119,7 @@ export function Reader({
   /* ── AI questions: Chrome on-device first, else OpenRouter if connected ── */
   const textLang = useMemo(() => (doc ? detectTextLang(doc.tokens.slice(0, 600).map((x) => x.text).join(' ')) : 'en'), [doc]);
   const [aiState, setAiState] = useState<AiState>('unavailable');
-  const [aiProgress, setAiProgress] = useState(0);
   const [orAuth, setOrAuth] = useState(openrouter.getAuth);
-  const [orLeft, setOrLeft] = useState<number | null>(null);
-  const [orPolicy, setOrPolicy] = useState(false);
-  const [aiLast, setAiLast] = useState<AiOutcome | null>(lastOutcome);
-  useEffect(() => onOutcome(setAiLast), []);
   useEffect(() => {
     if (doc) aiAvailability(textLang).then(setAiState);
   }, [doc, textLang]);
@@ -143,8 +139,7 @@ export function Reader({
     const ctl = new AbortController();
     const p = aiQuiz(passageText(d, from, to), textLang, eng, {
       signal: ctl.signal,
-      onError: (e) => {
-        if (e instanceof openrouter.PolicyError) setOrPolicy(true);
+      onError: () => {
         if (!openrouter.getAuth()) setOrAuth(null); // key revoked
       },
     });
@@ -159,19 +154,9 @@ export function Reader({
     pre.current = null;
   }, [engine]);
 
-  async function enableAiNow() {
-    setAiState('downloading');
-    await enableAi(textLang, setAiProgress);
-    setAiState(await aiAvailability(textLang));
-  }
-
   function openSettings() {
     pause();
     setSheet({ kind: 'settings' });
-    if (orAuth) openrouter.freeRequestsLeft(orAuth).then((n) => {
-      setOrLeft(n);
-      if (!openrouter.getAuth()) setOrAuth(null);
-    });
   }
 
   // skim checks need text outside the section for wrong answers: ≥ 3 sections per document
@@ -496,22 +481,7 @@ export function Reader({
       )}
 
       {sheet?.kind === 'settings' && (
-        <SettingsSheet s={settings} set={setSettings} onClose={() => setSheet(null)} ai={{
-            state: aiState,
-            progress: aiProgress,
-            enable: enableAiNow,
-            last: aiLast,
-            openrouter: {
-              connected: !!orAuth,
-              left: orLeft,
-              policyError: orPolicy,
-              connect: () => openrouter.connect(meta.id),
-              disconnect: () => {
-                openrouter.disconnect();
-                setOrAuth(null);
-              },
-            },
-          }} />
+        <TextSheet s={settings} set={setSettings} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'preparing' && (
         <div className="scrim">
