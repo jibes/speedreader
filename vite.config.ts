@@ -15,10 +15,12 @@ const ACCEPT = {
 
 export default defineConfig({
   base: './',
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['icons/apple-touch-icon.png'],
       manifest: {
         id: './',
@@ -44,6 +46,8 @@ export default defineConfig({
         launch_handler: { client_mode: 'focus-existing' },
       },
       workbox: {
+        // first install takes control right away (offline + OCR prefetch); updates still wait for the user's OK
+        clientsClaim: true,
         // app shell incl. PDF worker; OCR engine is cached on first use instead
         globPatterns: ['**/*.{js,mjs,css,html,png,svg,webmanifest}'],
         globIgnores: ['ocr/**'],
