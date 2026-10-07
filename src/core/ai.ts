@@ -163,6 +163,27 @@ export const chromeEngine = (lang: string): Engine => ({
 });
 
 /** Generate, ground-check and self-verify questions. Returns [] on any failure. */
+/** Outcome of the most recent attempt — shown in settings so failures aren't silent. */
+export type AiOutcome =
+  | { kind: 'ok'; engine: Engine['name']; used: number }
+  | { kind: 'invalid'; engine: Engine['name']; usable: number }
+  | { kind: 'error'; engine: Engine['name']; message: string }
+  | { kind: 'timeout'; engine: Engine['name'] };
+
+let last: AiOutcome | null = null;
+const listeners = new Set<(o: AiOutcome) => void>();
+export const lastOutcome = () => last;
+export function reportOutcome(o: AiOutcome) {
+  last = o;
+  listeners.forEach((l) => l(o));
+}
+export function onOutcome(l: (o: AiOutcome) => void) {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
 export async function aiQuiz(
   passage: string,
   lang: string,
@@ -170,20 +191,41 @@ export async function aiQuiz(
   { signal, rnd = Math.random, onError }: { signal?: AbortSignal; rnd?: () => number; onError?: (e: unknown) => void } = {},
 ): Promise<Question[]> {
   const langName = LANG_NAMES[lang] ?? 'English';
+  let candidates: Question[] = [];
   try {
     const out = await engine.ask(genSystem(langName), `Passage:\n"""\n${passage}\n"""`, GEN_SCHEMA, signal);
-    const candidates = validate(parse(out), passage).map((q) => ({ ...shuffled(q, rnd), engine: engine.name }));
-    if (candidates.length < 2) return [];
+    candidates = validate(parse(out), passage).map((q) => ({ ...shuffled(q, rnd), engine: engine.name }));
+  } catch (e) {
+    if (!signal?.aborted) {
+      onError?.(e);
+      reportOutcome({ kind: 'error', engine: engine.name, message: e instanceof Error ? e.message : String(e) });
+    }
+    return [];
+  }
+  if (candidates.length < 2) {
+    reportOutcome({ kind: 'invalid', engine: engine.name, usable: candidates.length });
+    return [];
+  }
 
-    // independent check: a fresh call sees only the passage and the questions
+  // independent check: a fresh call sees only the passage and the questions
+  let kept = candidates;
+  try {
     const listing = candidates
       .map((q, i) => `${i + 1}. ${q.prompt}\n${q.options.map((o, k) => `   ${k}) ${o}`).join('\n')}`)
       .join('\n');
     const verdict = parse(await engine.ask(CHECK_SYSTEM, `Passage:\n"""\n${passage}\n"""\n\nQuestions:\n${listing}`, CHECK_SCHEMA, signal)) as { answers?: number[] } | null;
-    const answers = verdict?.answers ?? [];
-    return candidates.filter((q, i) => answers[i] === q.answer);
-  } catch (e) {
-    if (!signal?.aborted) onError?.(e);
+    // an unusable verdict (wrong shape) is no evidence against the questions; only explicit disagreement drops them
+    if (Array.isArray(verdict?.answers) && verdict.answers.length === candidates.length) {
+      kept = candidates.filter((q, i) => verdict.answers![i] === q.answer);
+    }
+  } catch {
+    // the check is a safeguard on top of grounding; if it can't run, grounded questions stand
+    if (signal?.aborted) return [];
+  }
+  if (kept.length < 2) {
+    reportOutcome({ kind: 'invalid', engine: engine.name, usable: kept.length });
     return [];
   }
+  reportOutcome({ kind: 'ok', engine: engine.name, used: kept.length });
+  return kept;
 }

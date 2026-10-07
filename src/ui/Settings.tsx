@@ -1,4 +1,4 @@
-import type { AiState } from '../core/ai';
+import type { AiOutcome, AiState } from '../core/ai';
 import type { Settings } from '../core/store';
 import { t } from '../i18n';
 
@@ -10,6 +10,7 @@ type Props = {
     state: AiState;
     progress: number;
     enable: () => void;
+    last: AiOutcome | null;
     openrouter: { connected: boolean; left: number | null; policyError: boolean; connect: () => void; disconnect: () => void };
   };
 };
@@ -77,6 +78,21 @@ export function SettingsSheet({ s, set, onClose, ai }: Props) {
                     <button className="btn secondary" onClick={ai.openrouter.connect}>{t('or.connect')}</button>
                   )}
                 </div>
+                {ai.last && (
+                  <p className="ai-last">
+                    {t('ai.last', {
+                      engine: ai.last.engine === 'chrome' ? 'Chrome' : 'OpenRouter',
+                      result:
+                        ai.last.kind === 'ok'
+                          ? t('ai.res.ok', { n: ai.last.used })
+                          : ai.last.kind === 'invalid'
+                            ? t('ai.res.invalid', { n: ai.last.usable })
+                            : ai.last.kind === 'timeout'
+                              ? t('ai.res.timeout')
+                              : t('ai.res.error', { msg: ai.last.message.slice(0, 120) }),
+                    })}
+                  </p>
+                )}
                 {ai.openrouter.connected && (
                   <div className="row">
                     <label>

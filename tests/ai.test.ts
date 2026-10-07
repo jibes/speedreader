@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { aiAvailability, aiQuiz, chromeEngine, grounded, validate } from '../src/core/ai';
+import { aiAvailability, aiQuiz, chromeEngine, grounded, lastOutcome, validate } from '../src/core/ai';
 import { detectTextLang } from '../src/core/textlang';
 import { sampleFor } from '../src/core/sample';
 
@@ -87,9 +87,18 @@ describe('aiQuiz', () => {
     expect(destroyed).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps grounded questions when the check call itself fails, and reports outcomes', async () => {
+    const gen = { questions: [q(), q({ question: 'What do regressions do?', options: ['Repair misunderstandings', 'Waste time', 'Cause blindness', 'Nothing'], evidence: 'Regressions repair misunderstandings' })] };
+    mockModel(gen, 'not an object');
+    const out = await aiQuiz(passage, 'en', chromeEngine('en'));
+    expect(out).toHaveLength(2);
+    expect(lastOutcome()).toEqual({ kind: 'ok', engine: 'chrome', used: 2 });
+  });
+
   it('falls back (empty) when fewer than 2 questions survive', async () => {
     mockModel({ questions: [q(), q({ evidence: 'not in the passage at all whatsoever ok' })] }, { answers: [0] });
     expect(await aiQuiz(passage, 'en', chromeEngine('en'))).toEqual([]);
+    expect(lastOutcome()).toEqual({ kind: 'invalid', engine: 'chrome', usable: 1 });
   });
 
   it('survives model errors and invalid JSON', async () => {

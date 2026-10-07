@@ -1,5 +1,5 @@
 import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { aiAvailability, aiQuiz, chromeEngine, enableAi, type AiState, type Engine } from '../core/ai';
+import { aiAvailability, aiQuiz, chromeEngine, enableAi, lastOutcome, onOutcome, reportOutcome, type AiOutcome, type AiState, type Engine } from '../core/ai';
 import * as openrouter from '../core/openrouter';
 import { makeQuiz, type Question } from '../core/quiz';
 import { gistQuiz, planSkim, SKIM_PACE } from '../core/skim';
@@ -16,10 +16,10 @@ import { useWakeLock } from './useWakeLock';
 type QuizSheet = { kind: 'quiz'; questions: Question[]; from: number; to: number; ms: number; baseline?: boolean; skim?: boolean };
 type Sheet = { kind: 'settings' } | { kind: 'preparing' } | QuizSheet | { kind: 'result'; info: ResultInfo } | { kind: 'end' };
 
-/** AI generation may run while reading; at the checkpoint we wait at most this long */
-const AI_WAIT_MS = 25000;
-/** start generating this many words before the section ends */
-const AI_LEAD_WORDS = 150;
+/** at the checkpoint we wait at most this long; free hosted models can queue */
+const aiWaitMs = (e: Engine | null) => (e?.name === 'openrouter' ? 45000 : 25000);
+/** start generating this many words before the section ends (≈30–50 s at 300 wpm) */
+const aiLeadWords = (e: Engine | null) => (e?.name === 'openrouter' ? 250 : 150);
 
 const isEnd = (t: Doc['tokens'][number]) => t.end === 'sentence' || t.end === 'paragraph';
 
@@ -40,8 +40,20 @@ function passageText(d: Doc, from: number, to: number): string {
   return out.trim();
 }
 
-const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T) =>
-  Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
+/** wait for prefetched questions; on timeout record it and fall back to [] */
+function waitQuestions(p: Promise<Question[]> | undefined, engine: Engine | null): Promise<Question[]> {
+  if (!p || !engine) return Promise.resolve([]);
+  let done = false;
+  return Promise.race([
+    p.then((q) => ((done = true), q)),
+    new Promise<Question[]>((r) =>
+      setTimeout(() => {
+        if (!done) reportOutcome({ kind: 'timeout', engine: engine.name });
+        r([]);
+      }, aiWaitMs(engine)),
+    ),
+  ]);
+}
 
 interface Baseline {
   from: number;
@@ -110,6 +122,8 @@ export function Reader({
   const [orAuth, setOrAuth] = useState(openrouter.getAuth);
   const [orLeft, setOrLeft] = useState<number | null>(null);
   const [orPolicy, setOrPolicy] = useState(false);
+  const [aiLast, setAiLast] = useState<AiOutcome | null>(lastOutcome);
+  useEffect(() => onOutcome(setAiLast), []);
   useEffect(() => {
     if (doc) aiAvailability(textLang).then(setAiState);
   }, [doc, textLang]);
@@ -259,7 +273,7 @@ export function Reader({
     let questions: Question[] = [];
     if (!isSkim && live.current.useAi) {
       setSheet({ kind: 'preparing' });
-      questions = await withTimeout(prefetch(from, end) ?? Promise.resolve([]), AI_WAIT_MS, []);
+      questions = await waitQuestions(prefetch(from, end), live.current.engine);
     }
     if (questions.length < 2) questions = isSkim ? gistQuiz(d, planSkim(d), from, end, 3) : makeQuiz(d, from, end, 3);
     if (questions.length >= 2) {
@@ -279,8 +293,8 @@ export function Reader({
     if (!doc || goal !== 'train' || !useAi || !playing) return;
     const from = seg.current.start;
     const to = predictEnd(doc, from);
-    if (pos >= to - AI_LEAD_WORDS) prefetch(from, to);
-  }, [pos, doc, goal, useAi, playing, prefetch]);
+    if (pos >= to - aiLeadWords(engine)) prefetch(from, to);
+  }, [pos, doc, goal, useAi, playing, prefetch, engine]);
 
   /* ── the clock ──────────────────────────────────── */
   useEffect(() => {
@@ -365,7 +379,7 @@ export function Reader({
     let questions: Question[] = [];
     if (useAi) {
       setSheet({ kind: 'preparing' });
-      questions = await withTimeout(prefetch(baseline.from, baseline.to) ?? Promise.resolve([]), AI_WAIT_MS, []);
+      questions = await waitQuestions(prefetch(baseline.from, baseline.to), engine);
     }
     if (questions.length < 2) questions = makeQuiz(doc, baseline.from, baseline.to, 3);
     const q: QuizSheet = { kind: 'quiz', questions, from: baseline.from, to: baseline.to, ms, baseline: true };
@@ -486,6 +500,7 @@ export function Reader({
             state: aiState,
             progress: aiProgress,
             enable: enableAiNow,
+            last: aiLast,
             openrouter: {
               connected: !!orAuth,
               left: orLeft,
