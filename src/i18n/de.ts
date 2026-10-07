@@ -3,7 +3,8 @@ import type { Dict } from './index';
 const de: Dict = {
   'nav.read': 'Lesen',
   'nav.progress': 'Fortschritt',
-  'nav.science': 'Wissenschaft',
+  'nav.science': 'Forschung',
+  'nav.settings': 'Einstellungen',
   'nav.install': 'Installieren',
   'lang.label': 'Sprache',
   'lang.auto': 'Automatisch ({lang})',

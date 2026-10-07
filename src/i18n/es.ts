@@ -4,6 +4,7 @@ const es: Dict = {
   'nav.read': 'Leer',
   'nav.progress': 'Progreso',
   'nav.science': 'Ciencia',
+  'nav.settings': 'Ajustes',
   'nav.install': 'Instalar',
   'lang.label': 'Idioma',
   'lang.auto': 'Automático ({lang})',

@@ -3,14 +3,15 @@ import { completeLogin } from '../core/openrouter';
 import { sampleFor } from '../core/sample';
 import { store, type DocMeta, type Settings } from '../core/store';
 import { wordCount } from '../core/text';
-import { getLang, LANGS, detectLang, resolveLang, setLang, t, type LangPref } from '../i18n';
-import { Globe } from './icons';
+import { getLang, resolveLang, setLang, t } from '../i18n';
+import { AppSettings } from './AppSettings';
+import { Gear } from './icons';
 import { Library } from './Library';
 import { Reader } from './Reader';
 import { Science } from './Science';
 import { Stats } from './Stats';
 
-type View = 'library' | 'stats' | 'science';
+type View = 'library' | 'stats' | 'science' | 'settings';
 
 export default function App() {
   const [settings, setAll] = useState<Settings>(store.settings);
@@ -26,6 +27,7 @@ export default function App() {
       if (!r) return;
       setToast(r.ok ? { msg: t('or.ok') } : { msg: t('or.failed'), err: true });
       setTimeout(() => setToast(null), 4000);
+      if (r.returnTo === 'settings') setView('settings');
       const meta = r.returnTo && store.library().find((d) => d.id === r.returnTo);
       if (meta) setOpen({ meta });
     });
@@ -101,12 +103,15 @@ export default function App() {
     <div className="app">
       {toastEl}
       <header className="top">
-        <button className="brand" onClick={() => setView('library')}><i />Lumen</button>
+        <button className="brand" aria-label="Lumen" onClick={() => setView('library')}><i /><span>Lumen</span></button>
         <nav className="nav">
           {install && <button onClick={install}>{t('nav.install')}</button>}
           {tab('library', t('nav.read'))}
           {tab('stats', t('nav.progress'))}
           {tab('science', t('nav.science'))}
+          <button className="gear" aria-label={t('nav.settings')} title={t('nav.settings')} aria-current={view === 'settings' ? 'page' : undefined} onClick={() => setView('settings')}>
+            <Gear />
+          </button>
         </nav>
       </header>
       {view === 'library' && (
@@ -121,18 +126,7 @@ export default function App() {
       )}
       {view === 'stats' && <Stats onRetest={retest} />}
       {view === 'science' && <Science />}
-      <footer className="foot">
-        <label>
-          <Globe />
-          <span className="sr-only">{t('lang.label')}</span>
-          <select value={settings.lang} aria-label={t('lang.label')} onChange={(e) => setSettings({ lang: e.target.value as LangPref })}>
-            <option value="auto">{t('lang.auto', { lang: LANGS[detectLang()] })}</option>
-            {Object.entries(LANGS).map(([code, name]) => (
-              <option key={code} value={code}>{name}</option>
-            ))}
-          </select>
-        </label>
-      </footer>
+      {view === 'settings' && <AppSettings s={settings} set={setSettings} />}
     </div>
   );
 }
