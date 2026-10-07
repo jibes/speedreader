@@ -1,0 +1,176 @@
+/**
+ * "Sign in with OpenRouter" (OAuth 2 + PKCE, no backend): the user authorises
+ * Lumen on openrouter.ai and gets back a key tied to *their* account, so usage
+ * counts against their free daily allowance or credits, never ours.
+ * The key lives only in this browser's localStorage and is not in backups.
+ */
+import type { Engine } from './ai';
+
+const BASE = 'https://openrouter.ai';
+const API = `${BASE}/api/v1`;
+const KEY = 'speedreader:openrouter';
+const PKCE = 'speedreader:openrouter-pkce';
+
+export interface OpenRouterAuth {
+  key: string;
+  at: number;
+}
+
+export function getAuth(): OpenRouterAuth | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || 'null');
+    return v?.key ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function disconnect() {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+export async function pkcePair(): Promise<{ verifier: string; challenge: string }> {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  return { verifier, challenge: b64url(hash) };
+}
+
+/** Where OpenRouter sends the user back: the app's own URL, no query. */
+export const callbackUrl = () => new URL('./', document.baseURI).href;
+
+/** Start the login: remember the verifier (and what to reopen), then leave for openrouter.ai. */
+export async function connect(returnTo?: string) {
+  const { verifier, challenge } = await pkcePair();
+  sessionStorage.setItem(PKCE, JSON.stringify({ verifier, returnTo }));
+  const u = new URL('/auth', BASE);
+  u.searchParams.set('callback_url', callbackUrl());
+  u.searchParams.set('code_challenge', challenge);
+  u.searchParams.set('code_challenge_method', 'S256');
+  location.assign(u.href);
+}
+
+/**
+ * On app start: if the URL carries ?code= from OpenRouter, exchange it for the
+ * user's key. Returns null when there is nothing to do.
+ */
+export async function completeLogin(): Promise<{ ok: boolean; returnTo?: string } | null> {
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  const pending = sessionStorage.getItem(PKCE);
+  if (!code || !pending) return null;
+  history.replaceState(null, '', location.pathname);
+  sessionStorage.removeItem(PKCE);
+  const { verifier, returnTo } = JSON.parse(pending) as { verifier: string; returnTo?: string };
+  try {
+    const res = await fetch(`${API}/auth/keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: 'S256' }),
+    });
+    const data = (await res.json()) as { key?: string };
+    if (!res.ok || !data.key) return { ok: false, returnTo };
+    localStorage.setItem(KEY, JSON.stringify({ key: data.key, at: Date.now() } satisfies OpenRouterAuth));
+    return { ok: true, returnTo };
+  } catch {
+    return { ok: false, returnTo };
+  }
+}
+
+/** Free daily requests left on the user's account, if OpenRouter reports it. */
+export async function freeRequestsLeft(auth: OpenRouterAuth): Promise<number | null> {
+  try {
+    const res = await fetch(`${API}/key`, { headers: { Authorization: `Bearer ${auth.key}` } });
+    if (res.status === 401) {
+      disconnect(); // key was revoked on openrouter.ai
+      return null;
+    }
+    const d = (await res.json()) as { data?: { free_model_daily_requests?: { remaining?: number } } };
+    return d.data?.free_model_daily_requests?.remaining ?? null;
+  } catch {
+    return null;
+  }
+}
+
+interface ModelInfo {
+  id: string;
+  context_length?: number | null;
+  pricing?: { prompt?: string; completion?: string };
+  supported_parameters?: string[];
+}
+
+/** Families that write good multilingual questions, best first. */
+const PREFERRED = [/deepseek/i, /qwen3/i, /llama-3\.3-70b|llama-4/i, /gemma-3-27b|gemma-4/i, /mistral-small|mistral-medium/i, /gpt-oss/i];
+
+/** Pick up to 3 free models that support structured output, as a fallback chain. */
+export function pickFreeModels(list: ModelInfo[]): string[] {
+  const free = list.filter(
+    (m) =>
+      (m.id.endsWith(':free') || (m.pricing?.prompt === '0' && m.pricing?.completion === '0')) &&
+      (m.context_length ?? 0) >= 8000 &&
+      (m.supported_parameters ?? []).some((p) => p === 'response_format' || p === 'structured_outputs'),
+  );
+  const rank = (id: string) => {
+    const i = PREFERRED.findIndex((r) => r.test(id));
+    return i < 0 ? PREFERRED.length : i;
+  };
+  return free.sort((a, b) => rank(a.id) - rank(b.id)).slice(0, 3).map((m) => m.id);
+}
+
+let modelCache: { at: number; ids: string[] } | null = null;
+
+async function freeModels(): Promise<string[]> {
+  if (modelCache && Date.now() - modelCache.at < 6 * 3600e3) return modelCache.ids;
+  const res = await fetch(`${API}/models`);
+  const d = (await res.json()) as { data?: ModelInfo[] };
+  modelCache = { at: Date.now(), ids: pickFreeModels(d.data ?? []) };
+  return modelCache.ids;
+}
+
+export class PolicyError extends Error {}
+
+/**
+ * OpenRouter engine. `allowTraining: false` (default) routes only to providers
+ * that don't store or train on prompts; if none serve the free models the call
+ * fails with PolicyError and Lumen falls back to fill-in-the-blank.
+ */
+export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): Engine => ({
+  name: 'openrouter',
+  async ask(system, user, schema, signal) {
+    const models = await freeModels();
+    if (!models.length) throw new Error('no free models');
+    const res = await fetch(`${API}/chat/completions`, {
+      method: 'POST',
+      signal,
+      headers: {
+        Authorization: `Bearer ${auth.key}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.origin,
+        'X-Title': 'Lumen',
+      },
+      body: JSON.stringify({
+        models,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_schema', json_schema: { name: 'result', strict: true, schema } },
+        provider: { data_collection: allowTraining ? 'allow' : 'deny', require_parameters: true },
+        temperature: 0.3,
+      }),
+    });
+    if (res.status === 401) disconnect();
+    const d = (await res.json()) as { choices?: { message?: { content?: string } }[]; error?: { message?: string } };
+    if (!res.ok) {
+      const msg = d.error?.message ?? String(res.status);
+      if (/data policy|data_collection|no endpoints/i.test(msg)) throw new PolicyError(msg);
+      throw new Error(msg);
+    }
+    return d.choices?.[0]?.message?.content ?? '';
+  },
+});

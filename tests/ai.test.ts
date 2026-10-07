@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { aiAvailability, aiQuiz, grounded, validate } from '../src/core/ai';
+import { aiAvailability, aiQuiz, chromeEngine, grounded, validate } from '../src/core/ai';
 import { detectTextLang } from '../src/core/textlang';
 import { sampleFor } from '../src/core/sample';
 
@@ -62,7 +62,7 @@ describe('validation', () => {
 describe('aiQuiz', () => {
   it('returns [] without the Prompt API', async () => {
     expect(await aiAvailability('en')).toBe('unavailable');
-    expect(await aiQuiz(passage, 'en')).toEqual([]);
+    expect(await aiQuiz(passage, 'en', chromeEngine('en'))).toEqual([]);
   });
 
   it('keeps only questions the independent check answers the same way, shuffled but still correct', async () => {
@@ -79,7 +79,7 @@ describe('aiQuiz', () => {
       };
     };
     const { destroyed } = mockModel(gen, check);
-    const out = await aiQuiz(passage, 'en', undefined, () => 0.3);
+    const out = await aiQuiz(passage, 'en', chromeEngine('en'), { rnd: () => 0.3 });
     expect(out).toHaveLength(2);
     expect(out[0].kind).toBe('ai');
     expect(out[0].options[out[0].answer]).toBe('During fixations');
@@ -89,15 +89,15 @@ describe('aiQuiz', () => {
 
   it('falls back (empty) when fewer than 2 questions survive', async () => {
     mockModel({ questions: [q(), q({ evidence: 'not in the passage at all whatsoever ok' })] }, { answers: [0] });
-    expect(await aiQuiz(passage, 'en')).toEqual([]);
+    expect(await aiQuiz(passage, 'en', chromeEngine('en'))).toEqual([]);
   });
 
   it('survives model errors and invalid JSON', async () => {
     vi.stubGlobal('LanguageModel', { availability: async () => 'available', create: async () => ({ prompt: async () => 'not json', destroy() {} }) });
-    expect(await aiQuiz(passage, 'en')).toEqual([]);
+    expect(await aiQuiz(passage, 'en', chromeEngine('en'))).toEqual([]);
     vi.stubGlobal('LanguageModel', { availability: async () => { throw new Error('x'); }, create: async () => { throw new Error('boom'); } });
     expect(await aiAvailability('en')).toBe('unavailable');
-    expect(await aiQuiz(passage, 'en')).toEqual([]);
+    expect(await aiQuiz(passage, 'en', chromeEngine('en'))).toEqual([]);
   });
 });
 

@@ -6,7 +6,12 @@ type Props = {
   s: Settings;
   set: (p: Partial<Settings>) => void;
   onClose: () => void;
-  ai?: { state: AiState; progress: number; enable: () => void };
+  ai?: {
+    state: AiState;
+    progress: number;
+    enable: () => void;
+    openrouter: { connected: boolean; left: number | null; policyError: boolean; connect: () => void; disconnect: () => void };
+  };
 };
 
 function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -41,14 +46,49 @@ export function SettingsSheet({ s, set, onClose, ai }: Props) {
           <Seg value={s.theme} options={[['auto', t('theme.auto')], ['light', t('theme.light')], ['sepia', t('theme.sepia')], ['dark', t('theme.dark')]]} onChange={(theme) => set({ theme })} />
         </div>
         {ai && (
-          <div className="row">
-            <label>
-              {t('ai.title')}
-              <small>{ai.state === 'downloading' ? t('ai.downloading', { p: Math.round(ai.progress * 100) }) : t(`ai.${ai.state}`)}</small>
-            </label>
-            {ai.state === 'available' && <Switch on={s.ai} label={t('ai.title')} onChange={(v) => set({ ai: v })} />}
-            {ai.state === 'downloadable' && <button className="btn secondary" onClick={ai.enable}>{t('ai.enable')}</button>}
-          </div>
+          <>
+            <h3 className="sheet-h">{t('ai.title')}</h3>
+            <div className="row">
+              <label>{t('ai.use')}</label>
+              <Switch on={s.ai} label={t('ai.use')} onChange={(v) => set({ ai: v })} />
+            </div>
+            {s.ai && (
+              <>
+                <div className="row">
+                  <label>
+                    {t('ai.chrome')}
+                    <small>{ai.state === 'downloading' ? t('ai.downloading', { p: Math.round(ai.progress * 100) }) : t(`ai.${ai.state}`)}</small>
+                  </label>
+                  {ai.state === 'downloadable' && <button className="btn secondary" onClick={ai.enable}>{t('ai.enable')}</button>}
+                </div>
+                <div className="row">
+                  <label>
+                    {t('or.title')}
+                    <small>
+                      {ai.openrouter.connected
+                        ? [t('or.connected'), ai.openrouter.left !== null ? t('or.left', { n: ai.openrouter.left }) : ''].filter(Boolean).join(' · ')
+                        : t('or.desc')}
+                    </small>
+                    {ai.openrouter.policyError && !s.aiTraining && <small className="warn">{t('or.policy')}</small>}
+                  </label>
+                  {ai.openrouter.connected ? (
+                    <button className="btn secondary" onClick={ai.openrouter.disconnect}>{t('or.disconnect')}</button>
+                  ) : (
+                    <button className="btn secondary" onClick={ai.openrouter.connect}>{t('or.connect')}</button>
+                  )}
+                </div>
+                {ai.openrouter.connected && (
+                  <div className="row">
+                    <label>
+                      {t('or.training')}
+                      <small>{t('or.trainingSub')}</small>
+                    </label>
+                    <Switch on={s.aiTraining} label={t('or.training')} onChange={(v) => set({ aiTraining: v })} />
+                  </div>
+                )}
+              </>
+            )}
+          </>
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
           <button className="btn" onClick={onClose}>{t('common.done')}</button>

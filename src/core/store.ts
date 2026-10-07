@@ -39,8 +39,10 @@ export interface Settings {
   theme: 'auto' | 'light' | 'sepia' | 'dark';
   /** UI language; 'auto' follows the browser/OS */
   lang: LangPref;
-  /** use on-device AI questions when the browser offers them */
+  /** use AI questions when an engine is available */
   ai: boolean;
+  /** OpenRouter: also allow providers that may store/train on the text (more free models) */
+  aiTraining: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
   lang: 'auto',
   ai: true,
+  aiTraining: false,
 };
 
 /** training section length in words */
@@ -87,7 +90,7 @@ export const store = {
     // migrate pre-goal settings (training on/off)
     const goal = stored.goal ?? (stored.training === false ? 'read' : 'train');
     const s = { ...DEFAULT_SETTINGS, ...stored, goal };
-    return { goal: s.goal, wpm: s.wpm, fontSize: s.fontSize, serif: s.serif, theme: s.theme, lang: s.lang, ai: s.ai };
+    return { goal: s.goal, wpm: s.wpm, fontSize: s.fontSize, serif: s.serif, theme: s.theme, lang: s.lang, ai: s.ai, aiTraining: s.aiTraining };
   },
   saveSettings: (s: Settings) => lsSet('settings', s),
   library: () => lsArr<DocMeta>('library').sort((a, b) => b.opened - a.opened),

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { completeLogin } from '../core/openrouter';
 import { sampleFor } from '../core/sample';
 import { store, type DocMeta, type Settings } from '../core/store';
 import { wordCount } from '../core/text';
@@ -17,6 +18,18 @@ export default function App() {
   const [open, setOpen] = useState<{ meta: DocMeta; baseline?: boolean } | null>(null);
   const [incoming, setIncoming] = useState<{ text?: string; files?: File[] }>(readShare);
   const install = useInstallPrompt();
+  const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
+
+  // returning from "Sign in with OpenRouter": exchange the code, reopen the text
+  useEffect(() => {
+    completeLogin().then((r) => {
+      if (!r) return;
+      setToast(r.ok ? { msg: t('or.ok') } : { msg: t('or.failed'), err: true });
+      setTimeout(() => setToast(null), 4000);
+      const meta = r.returnTo && store.library().find((d) => d.id === r.returnTo);
+      if (meta) setOpen({ meta });
+    });
+  }, []);
 
   // "Open with Lumen" from the OS (installed app, Chromium)
   useEffect(() => {
@@ -50,8 +63,16 @@ export default function App() {
     else root.dataset.theme = settings.theme;
   }, [settings.theme]);
 
+  const toastEl = toast && (
+    <div className={`toast${toast.err ? ' err' : ''}`} role="status">
+      {toast.msg}
+    </div>
+  );
+
   if (open) {
     return (
+      <>
+      {toastEl}
       <Reader
         key={open.meta.id}
         meta={open.meta}
@@ -60,6 +81,7 @@ export default function App() {
         startWithBaseline={open.baseline}
         onExit={() => setOpen(null)}
       />
+      </>
     );
   }
 
@@ -77,6 +99,7 @@ export default function App() {
 
   return (
     <div className="app">
+      {toastEl}
       <header className="top">
         <button className="brand" onClick={() => setView('library')}><i />Lumen</button>
         <nav className="nav">

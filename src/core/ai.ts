@@ -1,6 +1,6 @@
 /**
- * Comprehension questions from Chrome's built-in model (Gemini Nano via the
- * Prompt API) — on-device, free, nothing leaves the machine.
+ * Comprehension questions from an AI engine: Chrome's built-in model (Gemini
+ * Nano via the Prompt API, on-device) or OpenRouter (see openrouter.ts).
  *
  * Small models make mistakes, so every set is checked before use:
  *  1. structure: 4 distinct options, one keyed answer
@@ -135,36 +135,55 @@ function shuffled(q: RawQ, rnd: () => number): Question {
 
 const parse = (s: string): unknown => {
   try {
-    return JSON.parse(s);
+    // some hosted models wrap JSON in prose or code fences
+    const m = s.match(/\{[\s\S]*\}/);
+    return JSON.parse(m ? m[0] : s);
   } catch {
     return null;
   }
 };
 
+/** A question-writing backend: one stateless call with a system prompt, user text and JSON schema. */
+export interface Engine {
+  name: 'chrome' | 'openrouter';
+  ask(system: string, user: string, schema: Record<string, unknown>, signal?: AbortSignal): Promise<string>;
+}
+
+/** Chrome built-in model: a fresh session per call so generation and check stay independent. */
+export const chromeEngine = (lang: string): Engine => ({
+  name: 'chrome',
+  async ask(system, user, schema, signal) {
+    const s = await LanguageModel.create({ ...expect(lang), signal, initialPrompts: [{ role: 'system', content: system }] });
+    try {
+      return await s.prompt(user, { responseConstraint: schema, signal });
+    } finally {
+      s.destroy();
+    }
+  },
+});
+
 /** Generate, ground-check and self-verify questions. Returns [] on any failure. */
-export async function aiQuiz(passage: string, lang: string, signal?: AbortSignal, rnd: () => number = Math.random): Promise<Question[]> {
-  if (!hasApi()) return [];
+export async function aiQuiz(
+  passage: string,
+  lang: string,
+  engine: Engine,
+  { signal, rnd = Math.random, onError }: { signal?: AbortSignal; rnd?: () => number; onError?: (e: unknown) => void } = {},
+): Promise<Question[]> {
   const langName = LANG_NAMES[lang] ?? 'English';
-  let gen: LanguageModel | null = null;
-  let check: LanguageModel | null = null;
   try {
-    gen = await LanguageModel.create({ ...expect(lang), signal, initialPrompts: [{ role: 'system', content: genSystem(langName) }] });
-    const out = await gen.prompt(`Passage:\n"""\n${passage}\n"""`, { responseConstraint: GEN_SCHEMA, signal });
-    const candidates = validate(parse(out), passage).map((q) => shuffled(q, rnd));
+    const out = await engine.ask(genSystem(langName), `Passage:\n"""\n${passage}\n"""`, GEN_SCHEMA, signal);
+    const candidates = validate(parse(out), passage).map((q) => ({ ...shuffled(q, rnd), engine: engine.name }));
     if (candidates.length < 2) return [];
 
-    // independent check: a fresh session sees only the passage and the questions
-    check = await LanguageModel.create({ ...expect(lang), signal, initialPrompts: [{ role: 'system', content: CHECK_SYSTEM }] });
+    // independent check: a fresh call sees only the passage and the questions
     const listing = candidates
       .map((q, i) => `${i + 1}. ${q.prompt}\n${q.options.map((o, k) => `   ${k}) ${o}`).join('\n')}`)
       .join('\n');
-    const verdict = parse(await check.prompt(`Passage:\n"""\n${passage}\n"""\n\nQuestions:\n${listing}`, { responseConstraint: CHECK_SCHEMA, signal })) as { answers?: number[] } | null;
+    const verdict = parse(await engine.ask(CHECK_SYSTEM, `Passage:\n"""\n${passage}\n"""\n\nQuestions:\n${listing}`, CHECK_SCHEMA, signal)) as { answers?: number[] } | null;
     const answers = verdict?.answers ?? [];
     return candidates.filter((q, i) => answers[i] === q.answer);
-  } catch {
+  } catch (e) {
+    if (!signal?.aborted) onError?.(e);
     return [];
-  } finally {
-    gen?.destroy();
-    check?.destroy();
   }
 }
