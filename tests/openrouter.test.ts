@@ -46,16 +46,19 @@ describe('model choice', () => {
       supported_parameters: params,
     });
     const ids = pickFreeModels([
+      m('openrouter/auto'),
+      m('switchpoint/router'),
+      m('vendor/zero-priced-but-not-free'),
       m('deepseek/deepseek-r1:free'),
       m('z/thinker:free', true, ['response_format', 'reasoning']),
       m('someone/tiny:free'),
       m('openai/gpt-5', false),
       m('qwen/qwen3-32b:free'),
-      m('meta/llama-3.3-70b:free', true, ['tools']),
+      m('meta/llama-3.3-70b:free'),
       m('deepseek/deepseek-v3:free'),
       m('mistral/mistral-small:free'),
     ]);
-    expect(ids).toEqual({ ids: ['deepseek/deepseek-v3:free', 'qwen/qwen3-32b:free', 'mistral/mistral-small:free'], structured: true });
+    expect(ids).toEqual({ ids: ['meta/llama-3.3-70b:free', 'mistral/mistral-small:free', 'deepseek/deepseek-v3:free'], structured: true });
   });
 });
 

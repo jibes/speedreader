@@ -104,12 +104,16 @@ interface ModelInfo {
   supported_parameters?: string[];
 }
 
-/** Families that write good multilingual questions, best first. */
-const PREFERRED = [/deepseek-(v3|chat)/i, /qwen3/i, /llama-3\.3-70b|llama-4/i, /gemma-3-27b|gemma-4/i, /mistral-small|mistral-medium/i, /gpt-oss/i];
+/** Free families that follow JSON instructions well in many languages, best first. */
+const PREFERRED = [/kimi-k2(?!.*think)/i, /llama-3\.3-70b/i, /mistral-small/i, /gemma-3-27b/i, /deepseek-(v3|chat)/i, /llama-3\.1-405b|hermes-3/i, /gemma-3-12b|glm-4\.5-air/i];
 /** reasoning models spend the time budget thinking — avoid when possible */
 const SLOW = /(^|[/-])r1\b|reason|think|qwq/i;
 
-const isFree = (m: ModelInfo) => m.id.endsWith(':free') || (m.pricing?.prompt === '0' && m.pricing?.completion === '0');
+/**
+ * Only explicit ":free" variants. Routers (openrouter/auto, …/router) can list a 0 price
+ * yet forward to paid models — that ends in "402 insufficient credits" on free accounts.
+ */
+const isFree = (m: ModelInfo) => m.id.endsWith(':free') && !/^openrouter\/|\/router\b|auto/i.test(m.id);
 const structured = (m: ModelInfo) => (m.supported_parameters ?? []).some((p) => p === 'response_format' || p === 'structured_outputs');
 /** thinking models can spend the whole output budget on hidden reasoning and return no text */
 const thinks = (m: ModelInfo) => SLOW.test(m.id) || (m.supported_parameters ?? []).some((p) => p === 'reasoning' || p === 'include_reasoning');
@@ -205,6 +209,7 @@ export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): 
       if (!res.ok) {
         if (/data policy|data_collection/i.test(msg)) throw new PolicyError(msg);
         if (res.status === 429) throw new Error(`rate limit: ${msg}`);
+      if (res.status === 402) throw new Error(`402 (${models.join(', ')}): ${msg}`);
         throw new Error(msg);
       }
       const choice = d.choices?.[0];
