@@ -80,6 +80,46 @@ export function rtf(s: string): string {
     .replace(/\n{2,}/g, '\n\n');
 }
 
+interface PdfItem {
+  str?: string;
+  transform: number[];
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Rebuild a page's text from positioned pdf.js items: items on one baseline form a
+ * line; a vertical gap clearly larger than the page's usual line spacing starts a
+ * paragraph. (Treating every line end as a paragraph made the reader pause on each line.)
+ */
+export function pdfPageText(items: PdfItem[]): string {
+  const lines: { y: number; text: string; endX: number }[] = [];
+  for (const it of items) {
+    if (typeof it.str !== 'string' || !it.str) continue;
+    const x = it.transform[4];
+    const y = it.transform[5];
+    const last = lines[lines.length - 1];
+    if (last && Math.abs(y - last.y) <= 2) {
+      // same line: keep words apart when the PDF positions them apart without a space
+      const gap = x - last.endX > 1 && !/\s$/.test(last.text) && !/^\s/.test(it.str);
+      last.text += (gap ? ' ' : '') + it.str;
+      last.endX = x + (it.width ?? 0);
+    } else {
+      lines.push({ y, text: it.str, endX: x + (it.width ?? 0) });
+    }
+  }
+  const gaps = lines.slice(1).map((l, i) => Math.abs(lines[i].y - l.y)).filter((g) => g > 0);
+  const sorted = [...gaps].sort((a, b) => a - b);
+  const typical = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  return lines
+    .map((l, i) => {
+      if (i === 0) return l.text.trim();
+      const gap = Math.abs(lines[i - 1].y - l.y);
+      return (typical && gap > typical * 1.4 ? '\n\n' : '\n') + l.text.trim();
+    })
+    .join('');
+}
+
 async function pdf(file: File, onProgress: Progress): Promise<string> {
   const pdfjs = await import('pdfjs-dist');
   const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
@@ -90,20 +130,7 @@ async function pdf(file: File, onProgress: Progress): Promise<string> {
     onProgress(t('prog.page', { i, n: doc.numPages }));
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    let lastY: number | null = null;
-    let text = '';
-    for (const item of content.items) {
-      if (!('str' in item)) continue;
-      const y = item.transform[5];
-      if (lastY !== null && Math.abs(y - lastY) > 1) {
-        // bigger vertical jump → paragraph break
-        text += Math.abs(y - lastY) > (item.height || 10) * 1.8 ? '\n\n' : '\n';
-      }
-      text += item.str;
-      if (item.hasEOL) text += '\n';
-      lastY = y;
-    }
-    pages.push(text);
+    pages.push(pdfPageText(content.items as PdfItem[]));
   }
   const joined = pages.join('\n\n');
   if (joined.replace(/\s/g, '').length < 20 * doc.numPages) {

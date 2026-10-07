@@ -44,7 +44,7 @@ export function normaliseText(raw: string): string {
   return raw
     .replace(/\r\n?/g, '\n')
     .replace(/­/g, '') // soft hyphen
-    .replace(/(\w)-\n(\w)/g, '$1$2') // de-hyphenate line breaks (PDF)
+    .replace(/(\p{Ll})-\n+(\p{Ll})/gu, '$1$2') // de-hyphenate line breaks (PDF)
     .replace(/[ \t\f\v ]+/g, ' ')
     .replace(/ *\n */g, '\n')
     // hard-wrapped CJK lines join without a space
@@ -52,6 +52,9 @@ export function normaliseText(raw: string): string {
     // single newlines inside paragraphs (hard-wrapped text) become spaces
     .replace(/([^\n])\n(?!\n)/g, '$1 ')
     .replace(/\n{3,}/g, '\n\n')
+    // a "paragraph" that stops mid-sentence and continues in lowercase is a broken line
+    // (PDF/copy-paste artefact), not a real paragraph: join it
+    .replace(/([^\s.!?…:;"”’»)\]])\n\n(?=[„“"‘'(]?\p{Ll})/gu, '$1 ')
     .trim();
 }
 
