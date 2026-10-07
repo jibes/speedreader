@@ -179,10 +179,18 @@ const textOf = (c: string | { type?: string; text?: string }[] | null | undefine
  * Tries strict JSON-schema output first; if no free endpoint supports it,
  * retries with the schema in the prompt (the pipeline validates either way).
  */
-export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): Engine => ({
+export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): Engine => {
+  const avoid = new Set<string>();
+  const engine: Engine = {
   name: 'openrouter',
+  avoidLast() {
+    if (engine.lastModel) avoid.add(engine.lastModel);
+  },
   async ask(system, user, schema, signal) {
-    const pick = await freeModels();
+    const all = await freeModels();
+    // skip models that produced unusable output this session, unless that leaves nothing
+    const preferred = all.ids.filter((id) => !avoid.has(id) && !avoid.has(id.replace(/:free$/, '')));
+    const pick = { ...all, ids: preferred.length ? preferred : all.ids };
     if (!pick.ids.length) throw new Error('no free models');
     const call = async (models: string[], strict: boolean) => {
       const res = await fetch(`${API}/chat/completions`, {
@@ -231,10 +239,12 @@ export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): 
       }
       const choice = d.choices?.[0];
       const content = textOf(choice?.message?.content);
+      engine.lastModel = d.model ?? models[0];
       if (content.trim()) return content;
       // some providers put the final JSON into the reasoning field
       const reasoning = choice?.message?.reasoning ?? '';
       if (/"(questions|answers)"\s*:/.test(reasoning)) return reasoning;
+      avoid.add(engine.lastModel);
       const used = d.model ?? models[0];
       tried.add(used);
       tried.add(models[0]);
@@ -242,4 +252,6 @@ export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): 
     }
     throw new Error(`empty answer (${lastEmpty})`);
   },
-});
+  };
+  return engine;
+};

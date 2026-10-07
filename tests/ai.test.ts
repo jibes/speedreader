@@ -98,7 +98,8 @@ describe('aiQuiz', () => {
   it('falls back (empty) when fewer than 2 questions survive', async () => {
     mockModel({ questions: [q(), q({ evidence: 'not in the passage at all whatsoever ok' })] }, { answers: [0] });
     expect(await aiQuiz(passage, 'en', chromeEngine('en'))).toEqual([]);
-    expect(lastOutcome()).toEqual({ kind: 'invalid', engine: 'chrome', usable: 1 });
+    expect(lastOutcome()).toMatchObject({ kind: 'invalid', engine: 'chrome', usable: 1 });
+    expect((lastOutcome() as { detail: string }).detail).toContain('quote not in text');
   });
 
   it('survives model errors and invalid JSON', async () => {
@@ -107,6 +108,28 @@ describe('aiQuiz', () => {
     vi.stubGlobal('LanguageModel', { availability: async () => { throw new Error('x'); }, create: async () => { throw new Error('boom'); } });
     expect(await aiAvailability('en')).toBe('unavailable');
     expect(await aiQuiz(passage, 'en', chromeEngine('en'))).toEqual([]);
+  });
+});
+
+describe('retry', () => {
+  it('generates a second time when the first set is unusable', async () => {
+    let n = 0;
+    vi.stubGlobal('LanguageModel', {
+      availability: async () => 'available',
+      create: async () => ({
+        destroy() {},
+        prompt: async (input: string) => {
+          n++;
+          if (input.includes('Questions:')) {
+            const blocks = input.split(/\n(?=\d+\. )/).slice(1);
+            return JSON.stringify({ answers: blocks.map((b) => b.split('\n').slice(1).findIndex((l) => l.includes('During fixations'))) });
+          }
+          return n === 1 ? 'garbage' : JSON.stringify({ questions: [q(), q({ question: 'Other?', options: ['During fixations', 'b', 'c', 'd'] })] });
+        },
+      }),
+    });
+    const out = await aiQuiz(passage, 'en', chromeEngine('en'), { rnd: () => 0 });
+    expect(out.length).toBe(2);
   });
 });
 

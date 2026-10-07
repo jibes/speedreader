@@ -109,20 +109,41 @@ export function grounded(evidence: string, passage: string): boolean {
   const cjk = /\p{Script=Han}/u.test(e);
   const units = cjk ? [...e.replace(/\s/g, '')] : e.split(' ');
   const pool = new Set(cjk ? [...p.replace(/\s/g, '')] : p.split(' '));
-  return units.filter((u) => pool.has(u)).length / units.length >= 0.8;
+  return units.filter((u) => pool.has(u)).length / units.length >= 0.75;
 }
 
-export function validate(raw: unknown, passage: string): RawQ[] {
+/** Valid questions plus a short reason when some were rejected (shown in settings for diagnosis). */
+export function diagnose(raw: unknown, passage: string): { valid: RawQ[]; why: string } {
   const qs = (raw as { questions?: RawQ[] })?.questions;
-  if (!Array.isArray(qs)) return [];
-  return qs.filter((q) => {
-    if (!q || typeof q.question !== 'string' || !Array.isArray(q.options) || q.options.length !== 4) return false;
-    if (!Number.isInteger(q.answer) || q.answer < 0 || q.answer > 3) return false;
-    const opts = q.options.map((o) => norm(String(o)));
-    if (opts.some((o) => !o) || new Set(opts).size !== 4) return false;
-    return grounded(String(q.evidence ?? ''), passage);
+  if (!Array.isArray(qs)) return { valid: [], why: raw === null ? 'unreadable JSON' : 'no questions in answer' };
+  let format = 0;
+  let evidence = 0;
+  const valid = qs.filter((q) => {
+    const ok =
+      q &&
+      typeof q.question === 'string' &&
+      Array.isArray(q.options) &&
+      q.options.length === 4 &&
+      Number.isInteger(q.answer) &&
+      q.answer >= 0 &&
+      q.answer <= 3 &&
+      new Set(q.options.map((o) => norm(String(o)))).size === 4 &&
+      q.options.every((o) => norm(String(o)));
+    if (!ok) {
+      format++;
+      return false;
+    }
+    if (!grounded(String(q.evidence ?? ''), passage)) {
+      evidence++;
+      return false;
+    }
+    return true;
   });
+  const why = [format && `${format}× format`, evidence && `${evidence}× quote not in text`].filter(Boolean).join(', ');
+  return { valid, why };
 }
+
+export const validate = (raw: unknown, passage: string): RawQ[] => diagnose(raw, passage).valid;
 
 function shuffled(q: RawQ, rnd: () => number): Question {
   const order = [0, 1, 2, 3];
@@ -147,6 +168,10 @@ const parse = (s: string): unknown => {
 export interface Engine {
   name: 'chrome' | 'openrouter';
   ask(system: string, user: string, schema: Record<string, unknown>, signal?: AbortSignal): Promise<string>;
+  /** model that answered the last call (hosted engines) */
+  lastModel?: string;
+  /** a model just produced unusable output: prefer others for the rest of the session */
+  avoidLast?(): void;
 }
 
 /** Chrome built-in model: a fresh session per call so generation and check stay independent. */
@@ -166,7 +191,7 @@ export const chromeEngine = (lang: string): Engine => ({
 /** Outcome of the most recent attempt — shown in settings so failures aren't silent. */
 export type AiOutcome =
   | { kind: 'ok'; engine: Engine['name']; used: number }
-  | { kind: 'invalid'; engine: Engine['name']; usable: number }
+  | { kind: 'invalid'; engine: Engine['name']; usable: number; detail?: string }
   | { kind: 'error'; engine: Engine['name']; message: string }
   | { kind: 'timeout'; engine: Engine['name'] };
 
@@ -192,18 +217,27 @@ export async function aiQuiz(
 ): Promise<Question[]> {
   const langName = LANG_NAMES[lang] ?? 'English';
   let candidates: Question[] = [];
-  try {
-    const out = await engine.ask(genSystem(langName), `Passage:\n"""\n${passage}\n"""`, GEN_SCHEMA, signal);
-    candidates = validate(parse(out), passage).map((q) => ({ ...shuffled(q, rnd), engine: engine.name }));
-  } catch (e) {
-    if (!signal?.aborted) {
+  let detail = '';
+  // a second try (other model where possible) when the first set is unusable
+  for (let attempt = 0; attempt < 2 && candidates.length < 2; attempt++) {
+    try {
+      const out = await engine.ask(genSystem(langName), `Passage:\n"""\n${passage}\n"""`, GEN_SCHEMA, signal);
+      const d = diagnose(parse(out), passage);
+      const why = [engine.lastModel?.replace(/:free$/, ''), d.why].filter(Boolean).join(' · ');
+      detail = detail ? `${detail}; ${why}` : why;
+      // keep the better of the attempts
+      if (d.valid.length > candidates.length) candidates = d.valid.map((q) => ({ ...shuffled(q, rnd), engine: engine.name }));
+      if (candidates.length < 2) engine.avoidLast?.();
+    } catch (e) {
+      if (signal?.aborted) return [];
+      if (attempt === 1 || candidates.length >= 2) break;
       onError?.(e);
       reportOutcome({ kind: 'error', engine: engine.name, message: e instanceof Error ? e.message : String(e) });
+      return [];
     }
-    return [];
   }
   if (candidates.length < 2) {
-    reportOutcome({ kind: 'invalid', engine: engine.name, usable: candidates.length });
+    reportOutcome({ kind: 'invalid', engine: engine.name, usable: candidates.length, detail });
     return [];
   }
 
@@ -223,7 +257,7 @@ export async function aiQuiz(
     if (signal?.aborted) return [];
   }
   if (kept.length < 2) {
-    reportOutcome({ kind: 'invalid', engine: engine.name, usable: kept.length });
+    reportOutcome({ kind: 'invalid', engine: engine.name, usable: kept.length, detail: [engine.lastModel?.replace(/:free$/, ''), 'self-check disagreed'].filter(Boolean).join(' · ') });
     return [];
   }
   reportOutcome({ kind: 'ok', engine: engine.name, used: kept.length });
