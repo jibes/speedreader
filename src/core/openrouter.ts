@@ -118,12 +118,29 @@ const structured = (m: ModelInfo) => (m.supported_parameters ?? []).some((p) => 
 /** thinking models can spend the whole output budget on hidden reasoning and return no text */
 const thinks = (m: ModelInfo) => SLOW.test(m.id) || (m.supported_parameters ?? []).some((p) => p === 'reasoning' || p === 'include_reasoning');
 
-/** Up to 3 free models as a fallback chain: structured output, non-thinking, preferred families first. */
+/** Parameter count in billions from ids like "llama-3.3-70b" or "qwen3-235b-a22b" (largest number before "b"). */
+export function modelSize(id: string): number | null {
+  const sizes = [...id.toLowerCase().matchAll(/(?:^|[-_/:])e?(\d+(?:\.\d+)?)b(?![a-z])/g)].map((m) => parseFloat(m[1]));
+  return sizes.length ? Math.max(...sizes) : null;
+}
+
+/**
+ * Up to 3 free models as a fallback chain. Quality first: known good families,
+ * then size (models under ~7B ramble or break JSON), then no thinking; structured
+ * output is only a tie-breaker because prompt-only JSON works too.
+ */
 export function pickFreeModels(list: ModelInfo[]): { ids: string[]; structured: boolean } {
   const free = list.filter((m) => isFree(m) && (m.context_length ?? 0) >= 8000);
   const rank = (m: ModelInfo) => {
     const fam = PREFERRED.findIndex((r) => r.test(m.id));
-    return (structured(m) ? 0 : 100) + (thinks(m) ? 50 : 0) + (fam < 0 ? PREFERRED.length : fam);
+    const size = modelSize(m.id);
+    return (
+      (size !== null && size < 7 ? 1000 : 0) +
+      (fam < 0 ? 200 : fam * 10) +
+      (thinks(m) ? 50 : 0) +
+      (structured(m) ? 0 : 5) -
+      Math.min(size ?? 30, 120) / 20 // among equals, bigger is better
+    );
   };
   const chosen = free.sort((a, b) => rank(a) - rank(b)).slice(0, 3);
   return { ids: chosen.map((m) => m.id), structured: chosen.length > 0 && chosen.every(structured) };
