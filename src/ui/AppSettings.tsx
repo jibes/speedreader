@@ -115,7 +115,7 @@ function AiSettings({ s, set }: { s: Settings; set: (p: Partial<Settings>) => vo
                   last.kind === 'ok'
                     ? t('ai.res.ok', { n: last.used })
                     : last.kind === 'invalid'
-                      ? t('ai.res.invalid', { n: last.usable })
+                      ? t('ai.res.invalid', { n: last.usable }) + (last.detail ? ` (${last.detail})` : '')
                       : last.kind === 'timeout'
                         ? t('ai.res.timeout')
                         : t('ai.res.error', { msg: last.message.slice(0, 120) }),
