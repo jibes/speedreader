@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aiQuiz } from '../src/core/ai';
-import { completeLogin, getAuth, openRouterEngine, pickFreeModels, pkcePair, PolicyError, resetModelCache } from '../src/core/openrouter';
+import { completeLogin, getAuth, modelSize, openRouterEngine, pickFreeModels, pkcePair, PolicyError, resetModelCache } from '../src/core/openrouter';
 
 beforeEach(() => {
   localStorage.clear();
@@ -59,6 +59,28 @@ describe('model choice', () => {
       m('mistral/mistral-small:free'),
     ]);
     expect(ids).toEqual({ ids: ['meta/llama-3.3-70b:free', 'mistral/mistral-small:free', 'deepseek/deepseek-v3:free'], structured: true });
+  });
+});
+
+describe('model size and tiny models', () => {
+  it('reads parameter counts from ids', () => {
+    expect(modelSize('liquid/lfm-2.5-2.6b:free')).toBe(2.6);
+    expect(modelSize('meta-llama/llama-3.3-70b-instruct:free')).toBe(70);
+    expect(modelSize('qwen/qwen3-235b-a22b:free')).toBe(235);
+    expect(modelSize('google/gemma-3n-e4b-it:free')).toBe(4);
+    expect(modelSize('moonshotai/kimi-k2:free')).toBeNull();
+  });
+
+  it('never prefers a tiny structured-output model over a good family without it', () => {
+    const m = (id: string, params: string[]) => ({ id, context_length: 32000, pricing: { prompt: '0', completion: '0' }, supported_parameters: params });
+    const pick = pickFreeModels([
+      m('liquid/lfm-2.5-2.6b:free', ['response_format']),
+      m('meta-llama/llama-3.3-70b-instruct:free', ['tools']),
+      m('mistralai/mistral-small-3.1-24b-instruct:free', ['response_format']),
+      m('unknown/big-model-120b:free', ['response_format']),
+    ]);
+    expect(pick.ids).toEqual(['meta-llama/llama-3.3-70b-instruct:free', 'mistralai/mistral-small-3.1-24b-instruct:free', 'unknown/big-model-120b:free']);
+    expect(pick.structured).toBe(false);
   });
 });
 
