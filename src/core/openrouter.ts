@@ -111,19 +111,25 @@ const SLOW = /(^|[/-])r1\b|reason|think|qwq/i;
 
 const isFree = (m: ModelInfo) => m.id.endsWith(':free') || (m.pricing?.prompt === '0' && m.pricing?.completion === '0');
 const structured = (m: ModelInfo) => (m.supported_parameters ?? []).some((p) => p === 'response_format' || p === 'structured_outputs');
+/** thinking models can spend the whole output budget on hidden reasoning and return no text */
+const thinks = (m: ModelInfo) => SLOW.test(m.id) || (m.supported_parameters ?? []).some((p) => p === 'reasoning' || p === 'include_reasoning');
 
-/** Up to 3 free models as a fallback chain: structured output and fast families first. */
+/** Up to 3 free models as a fallback chain: structured output, non-thinking, preferred families first. */
 export function pickFreeModels(list: ModelInfo[]): { ids: string[]; structured: boolean } {
   const free = list.filter((m) => isFree(m) && (m.context_length ?? 0) >= 8000);
   const rank = (m: ModelInfo) => {
     const fam = PREFERRED.findIndex((r) => r.test(m.id));
-    return (structured(m) ? 0 : 100) + (SLOW.test(m.id) ? 50 : 0) + (fam < 0 ? PREFERRED.length : fam);
+    return (structured(m) ? 0 : 100) + (thinks(m) ? 50 : 0) + (fam < 0 ? PREFERRED.length : fam);
   };
   const chosen = free.sort((a, b) => rank(a) - rank(b)).slice(0, 3);
   return { ids: chosen.map((m) => m.id), structured: chosen.length > 0 && chosen.every(structured) };
 }
 
 let modelCache: { at: number; pick: ReturnType<typeof pickFreeModels> } | null = null;
+/** for tests */
+export const resetModelCache = () => {
+  modelCache = null;
+};
 
 async function freeModels() {
   if (modelCache && Date.now() - modelCache.at < 6 * 3600e3) return modelCache.pick;
@@ -134,6 +140,16 @@ async function freeModels() {
 }
 
 export class PolicyError extends Error {}
+
+interface ChatResponse {
+  model?: string;
+  choices?: { finish_reason?: string; message?: { content?: string | { type?: string; text?: string }[] | null; reasoning?: string | null } }[];
+  error?: { message?: string };
+}
+
+/** message.content may be a string or an array of content parts */
+const textOf = (c: string | { type?: string; text?: string }[] | null | undefined) =>
+  typeof c === 'string' ? c : Array.isArray(c) ? c.map((p) => p.text ?? '').join('') : '';
 
 /**
  * OpenRouter engine. `allowTraining: false` (default) routes only to providers
@@ -147,7 +163,7 @@ export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): 
   async ask(system, user, schema, signal) {
     const pick = await freeModels();
     if (!pick.ids.length) throw new Error('no free models');
-    const call = async (strict: boolean) => {
+    const call = async (models: string[], strict: boolean) => {
       const res = await fetch(`${API}/chat/completions`, {
         method: 'POST',
         signal,
@@ -158,7 +174,7 @@ export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): 
           'X-Title': 'Lumen',
         },
         body: JSON.stringify({
-          models: pick.ids,
+          models,
           messages: [
             { role: 'system', content: strict ? system : `${system}\n\nReply with JSON only, no prose, matching this JSON schema:\n${JSON.stringify(schema)}` },
             { role: 'user', content: user },
@@ -166,26 +182,42 @@ export const openRouterEngine = (auth: OpenRouterAuth, allowTraining: boolean): 
           ...(strict ? { response_format: { type: 'json_schema', json_schema: { name: 'result', strict: true, schema } } } : {}),
           provider: { data_collection: allowTraining ? 'allow' : 'deny', require_parameters: strict },
           temperature: 0.3,
-          max_tokens: 1500,
+          // room for models that think before answering
+          max_tokens: 4000,
         }),
       });
       if (res.status === 401) disconnect();
-      const d = (await res.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[]; error?: { message?: string } };
+      const d = (await res.json().catch(() => ({}))) as ChatResponse;
       return { res, d, msg: d.error?.message ?? `HTTP ${res.status}` };
     };
 
-    let { res, d, msg } = await call(pick.structured);
-    // no endpoint can do structured output (or similar parameter mismatch) → prompt-only JSON
-    if (!res.ok && pick.structured && res.status !== 401 && res.status !== 402 && res.status !== 429 && !/data policy|data_collection/i.test(msg)) {
-      ({ res, d, msg } = await call(false));
+    // a model may answer with empty text (e.g. budget spent thinking): try the next one
+    const tried = new Set<string>();
+    let lastEmpty = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const models = pick.ids.filter((id) => !tried.has(id) && !tried.has(id.replace(/:free$/, '')));
+      if (!models.length) break;
+      let { res, d, msg } = await call(models, pick.structured);
+      // no endpoint can do structured output (or similar parameter mismatch) → prompt-only JSON
+      if (!res.ok && pick.structured && res.status !== 401 && res.status !== 402 && res.status !== 429 && !/data policy|data_collection/i.test(msg)) {
+        ({ res, d, msg } = await call(models, false));
+      }
+      if (!res.ok) {
+        if (/data policy|data_collection/i.test(msg)) throw new PolicyError(msg);
+        if (res.status === 429) throw new Error(`rate limit: ${msg}`);
+        throw new Error(msg);
+      }
+      const choice = d.choices?.[0];
+      const content = textOf(choice?.message?.content);
+      if (content.trim()) return content;
+      // some providers put the final JSON into the reasoning field
+      const reasoning = choice?.message?.reasoning ?? '';
+      if (/"(questions|answers)"\s*:/.test(reasoning)) return reasoning;
+      const used = d.model ?? models[0];
+      tried.add(used);
+      tried.add(models[0]);
+      lastEmpty = `${used}, ${choice?.finish_reason ?? '?'}`;
     }
-    if (!res.ok) {
-      if (/data policy|data_collection/i.test(msg)) throw new PolicyError(msg);
-      if (res.status === 429) throw new Error(`rate limit: ${msg}`);
-      throw new Error(msg);
-    }
-    const content = d.choices?.[0]?.message?.content ?? '';
-    if (!content.trim()) throw new Error('empty answer');
-    return content;
+    throw new Error(`empty answer (${lastEmpty})`);
   },
 });

@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aiQuiz } from '../src/core/ai';
-import { completeLogin, getAuth, openRouterEngine, pickFreeModels, pkcePair, PolicyError } from '../src/core/openrouter';
+import { completeLogin, getAuth, openRouterEngine, pickFreeModels, pkcePair, PolicyError, resetModelCache } from '../src/core/openrouter';
 
 beforeEach(() => {
   localStorage.clear();
@@ -47,6 +47,7 @@ describe('model choice', () => {
     });
     const ids = pickFreeModels([
       m('deepseek/deepseek-r1:free'),
+      m('z/thinker:free', true, ['response_format', 'reasoning']),
       m('someone/tiny:free'),
       m('openai/gpt-5', false),
       m('qwen/qwen3-32b:free'),
@@ -88,6 +89,37 @@ describe('engine', () => {
     expect(out).toContain('"answers"');
     expect(bodies).toHaveLength(2);
     expect((bodies[1] as { messages: { content: string }[] }).messages[0].content).toContain('JSON schema');
+  });
+
+  it('retries the next model when one returns empty text, and reports model + finish reason', async () => {
+    const three = Response.json({ data: ['a/one:free', 'b/two:free', 'c/three:free'].map((id) => ({ id, context_length: 32000, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['response_format'] })) });
+    const seen: string[][] = [];
+    resetModelCache();
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/models')) return three.clone();
+      const body = JSON.parse(init!.body as string);
+      seen.push(body.models);
+      return seen.length === 1
+        ? Response.json({ model: body.models[0], choices: [{ finish_reason: 'length', message: { content: '', reasoning: 'thinking…' } }] })
+        : Response.json({ model: body.models[0], choices: [{ message: { content: [{ type: 'text', text: '{"answers":[0]}' }] } }] });
+    }));
+    const out = await openRouterEngine({ key: 'k', at: 0 }, false).ask('sys', 'user', { type: 'object' });
+    expect(out).toBe('{"answers":[0]}');
+    expect(seen[1]).not.toContain(seen[0][0]);
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/models')) return three.clone();
+      const body = JSON.parse(init!.body as string);
+      return Response.json({ model: body.models[0], choices: [{ finish_reason: 'length', message: { content: null } }] });
+    }));
+    await expect(openRouterEngine({ key: 'k', at: 0 }, false).ask('sys', 'user', {})).rejects.toThrow(/empty answer \(.+, length\)/);
+    resetModelCache();
+  });
+
+  it('uses JSON that a provider put into the reasoning field', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.endsWith('/models') ? models.clone() : Response.json({ choices: [{ message: { content: '', reasoning: 'ok {"answers":[3]}' } }] })));
+    expect(await openRouterEngine({ key: 'k', at: 0 }, false).ask('s', 'u', {})).toContain('"answers"');
   });
 
   it('reports a data-policy refusal so the UI can explain it', async () => {
