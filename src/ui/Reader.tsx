@@ -1,5 +1,6 @@
 import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { aiAvailability, aiQuiz, enableAi, type AiState } from '../core/ai';
+import { aiAvailability, aiQuiz, chromeEngine, enableAi, type AiState, type Engine } from '../core/ai';
+import * as openrouter from '../core/openrouter';
 import { makeQuiz, type Question } from '../core/quiz';
 import { gistQuiz, planSkim, SKIM_PACE } from '../core/skim';
 import { SECTION_WORDS, SKIM_SECTION_WORDS, store, type DocMeta, type Settings } from '../core/store';
@@ -102,40 +103,70 @@ export function Reader({
 
   const skim = useMemo(() => (doc && goal === 'skim' ? planSkim(doc) : null), [doc, goal]);
 
-  /* ── on-device AI questions ─────────────────────── */
+  /* ── AI questions: Chrome on-device first, else OpenRouter if connected ── */
   const textLang = useMemo(() => (doc ? detectTextLang(doc.tokens.slice(0, 600).map((x) => x.text).join(' ')) : 'en'), [doc]);
   const [aiState, setAiState] = useState<AiState>('unavailable');
   const [aiProgress, setAiProgress] = useState(0);
+  const [orAuth, setOrAuth] = useState(openrouter.getAuth);
+  const [orLeft, setOrLeft] = useState<number | null>(null);
+  const [orPolicy, setOrPolicy] = useState(false);
   useEffect(() => {
     if (doc) aiAvailability(textLang).then(setAiState);
   }, [doc, textLang]);
-  const useAi = settings.ai && aiState === 'available';
+  const engine: Engine | null = useMemo(
+    () => (aiState === 'available' ? chromeEngine(textLang) : orAuth ? openrouter.openRouterEngine(orAuth, settings.aiTraining) : null),
+    [aiState, textLang, orAuth, settings.aiTraining],
+  );
+  const useAi = settings.ai && !!engine;
   const pre = useRef<{ from: number; to: number; p: Promise<Question[]>; ctl: AbortController } | null>(null);
 
   const prefetch = useCallback((from: number, to: number) => {
     const d = live.current.doc;
-    if (!d || (pre.current && pre.current.from === from && pre.current.to === to)) return pre.current?.p;
+    const eng = live.current.engine;
+    if (!d || !eng) return undefined;
+    if (pre.current && pre.current.from === from && pre.current.to === to) return pre.current.p;
     pre.current?.ctl.abort();
     const ctl = new AbortController();
-    const p = aiQuiz(passageText(d, from, to), textLang, ctl.signal);
+    const p = aiQuiz(passageText(d, from, to), textLang, eng, {
+      signal: ctl.signal,
+      onError: (e) => {
+        if (e instanceof openrouter.PolicyError) setOrPolicy(true);
+        if (!openrouter.getAuth()) setOrAuth(null); // key revoked
+      },
+    });
     pre.current = { from, to, p, ctl };
     return p;
   }, [textLang]);
 
   useEffect(() => () => pre.current?.ctl.abort(), []);
+  // a different engine or privacy setting invalidates prefetched questions
+  useEffect(() => {
+    pre.current?.ctl.abort();
+    pre.current = null;
+  }, [engine]);
 
   async function enableAiNow() {
     setAiState('downloading');
     await enableAi(textLang, setAiProgress);
     setAiState(await aiAvailability(textLang));
   }
+
+  function openSettings() {
+    pause();
+    setSheet({ kind: 'settings' });
+    if (orAuth) openrouter.freeRequestsLeft(orAuth).then((n) => {
+      setOrLeft(n);
+      if (!openrouter.getAuth()) setOrAuth(null);
+    });
+  }
+
   // skim checks need text outside the section for wrong answers: ≥ 3 sections per document
   const section = goal === 'skim' ? Math.max(200, Math.min(SKIM_SECTION_WORDS, Math.round((doc?.tokens.length ?? 0) / 3))) : SECTION_WORDS;
   const cur: Cur = useMemo(() => ({ start: pos, end: pos + 1 }), [pos]);
 
   // latest values for callbacks fired from timers / unmount
-  const live = useRef({ pos, settings, doc, playing, useAi });
-  live.current = { pos, settings, doc, playing, useAi };
+  const live = useRef({ pos, settings, doc, playing, useAi, engine });
+  live.current = { pos, settings, doc, playing, useAi, engine };
 
   /* ── session accounting ─────────────────────────── */
   const segMs = () => seg.current.ms + (live.current.playing ? performance.now() - playStart.current : 0);
@@ -411,7 +442,7 @@ export function Reader({
         <div className="r-goal" title={t(`goal.${goal}.info`)}>
           <Seg value={goal} options={[['read', t('goal.read')], ['train', t('goal.train')], ['skim', t('goal.skim')]]} onChange={(g) => setSettings({ goal: g })} />
         </div>
-        <button className="icon" aria-label={t('reader.textSettings')} onClick={() => { pause(); setSheet({ kind: 'settings' }); }}><TextSize /></button>
+        <button className="icon" aria-label={t('reader.textSettings')} onClick={openSettings}><TextSize /></button>
       </div>
       <div className="r-progress"><span style={{ width: `${progress * 100}%` }} /></div>
 
@@ -451,7 +482,21 @@ export function Reader({
       )}
 
       {sheet?.kind === 'settings' && (
-        <SettingsSheet s={settings} set={setSettings} onClose={() => setSheet(null)} ai={{ state: aiState, progress: aiProgress, enable: enableAiNow }} />
+        <SettingsSheet s={settings} set={setSettings} onClose={() => setSheet(null)} ai={{
+            state: aiState,
+            progress: aiProgress,
+            enable: enableAiNow,
+            openrouter: {
+              connected: !!orAuth,
+              left: orLeft,
+              policyError: orPolicy,
+              connect: () => openrouter.connect(meta.id),
+              disconnect: () => {
+                openrouter.disconnect();
+                setOrAuth(null);
+              },
+            },
+          }} />
       )}
       {sheet?.kind === 'preparing' && (
         <div className="scrim">

@@ -38,7 +38,7 @@ export function Quiz({ questions, onDone }: { questions: Question[]; onDone: (co
   return (
     <div className="scrim">
       <div className="sheet" role="dialog" aria-label="Comprehension check">
-        <h3>{t('quiz.title')}{ai && <span className="badge">{t('quiz.aiBadge')}</span>}</h3>
+        <h3>{t('quiz.title')}{ai && <span className="badge">{q.engine === 'openrouter' ? 'AI · OpenRouter' : t('quiz.aiBadge')}</span>}</h3>
         <p className="sub">{ai ? t('quiz.aiSub') : gist ? t('quiz.gistSub') : t('quiz.cloze')}</p>
         <p className="q-prompt">
           {ai ? (

@@ -10,6 +10,7 @@ Three goals (Settings → Goal):
 
 - **Train** — after each 300-word section, three auto-generated cloze questions; a weighted up/down staircase sets the speed to hold ~75 % comprehension. Score = **effective reading rate (WPM × comprehension)** — speed alone is meaningless (Rayner et al., 2016).
   - **AI questions (Chrome built-in, on-device):** where Chrome's Prompt API (Gemini Nano) is available, each section gets 3 multiple-choice questions — main idea, inference, detail — generated in the background while you read. Each set is checked before use: 4 distinct options, quoted evidence must occur in the passage, and a fresh model session must answer each question the same way; < 2 survivors → fill-in-the-blank fallback. Toggle / one-time model download in *Aa* settings. Nothing leaves the device.
+  - **OpenRouter (any browser):** where Chrome's model isn't available, users can *Connect* their own free OpenRouter account (OAuth PKCE, no backend). Usage counts against the user's free daily requests; the key stays in their browser and is never exported. Requests go to free models with structured output, routed only to providers that don't store prompts unless the user allows it.
 - **Read** — steady pacer at the speed you set, no checks.
 - **Skim** — for gist (Duggan & Payne, 2009): first sentence of each paragraph and key terms (tf-idf) stay bold and run at your pace; the rest is dimmed and swept at ¼ time. Every 600 words: "which topic came up?" checks.
 

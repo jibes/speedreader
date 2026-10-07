@@ -10,6 +10,8 @@ import { isCommon } from './words';
 export interface Question {
   /** cloze: fill the blank in a sentence; gist: which topic came up (skimming); ai: on-device generated */
   kind?: 'cloze' | 'gist' | 'ai';
+  /** ai: which engine wrote it */
+  engine?: 'chrome' | 'openrouter';
   /** cloze: sentence with the target replaced by _____ */
   prompt: string;
   options: string[];
