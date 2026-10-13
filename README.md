@@ -54,3 +54,7 @@ npm run build    # static site in dist/
 `scripts/copy-ocr.mjs` (run automatically before dev/build) self-hosts the Tesseract OCR engine and English/German language data in `public/ocr/`, so OCR works offline.
 
 Deploy: static `dist/` anywhere. `.github/workflows/pages.yml` publishes to GitHub Pages on push to `main` (enable Pages → *GitHub Actions* in repo settings).
+
+## Licence
+
+[GPL-3.0-or-later](LICENSE).
